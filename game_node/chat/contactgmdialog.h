@@ -2,18 +2,17 @@
 #define CONTACTGMDIALOG_H
 
 #include <QString>
+#include <QStringList>
+#include <functional>
 
 class QWidget;
 
 class ContactGmDialog
 {
 public:
-    /**
-     * Show the GM contact / chat popup dialog.
-     * @param parent  Parent widget for centering and modality.
-     * @param teamName  Current team name (used as chat sender).
-     */
-    static void show(QWidget *parent, const QString &teamName);
+    static void show(QWidget *parent, const QString &teamName,
+                     const QStringList &messages = {},
+                     const std::function<void(const QString &)> &sendCb = nullptr);
 };
 
 #endif // CONTACTGMDIALOG_H

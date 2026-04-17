@@ -2,11 +2,14 @@
 #define READYPAGE_H
 
 #include <QWidget>
+#include <QStringList>
+#include <functional>
 
 class QLabel;
 class QProgressBar;
 class QTimer;
 class QVBoxLayout;
+class QPushButton;
 class MissionPage;
 
 class ReadyPage : public QWidget
@@ -18,7 +21,18 @@ public:
 
     void setTeamName(const QString &name);
     void resetCountdown(int seconds);
+    void pauseCountdown();
+    void resumeCountdown();
+    void syncTimer(int seconds, bool running);
     void setMissionWidget(MissionPage *mission);
+
+    void addSystemNotice(const QString &text);
+    void addGmDirectMessage(const QString &text);
+
+    void setMissionProgress(int percent);
+    void setGlobalProgress(int percent);
+
+    void setSendMessageCallback(const std::function<void(const QString &)> &cb);
 
 private:
     void setupUi();
@@ -33,9 +47,22 @@ private:
     int m_remainingSeconds;
     QString m_teamName;
 
-    QVBoxLayout *m_eventLayout;    // layout inside eventContainer, for injecting missions
+    QVBoxLayout *m_eventLayout;
     QWidget *m_currentMissionWidget;
+<<<<<<< Updated upstream
     QLabel *m_eventTitleLabel;
+=======
+
+    QPushButton *m_systemNoticesButton;
+    QPushButton *m_contactGmButton;
+    QLabel *m_missionPercentLabel;
+    QLabel *m_globalPercentLabel;
+    int m_unreadNotices;
+    int m_unreadMessages;
+    QStringList m_notices;
+    QStringList m_directMessages;
+    std::function<void(const QString &)> m_sendMessageCb;
+>>>>>>> Stashed changes
 };
 
 #endif // READYPAGE_H

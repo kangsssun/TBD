@@ -4,6 +4,12 @@
 #include <QWidget>
 #include <QProcess>
 #include <QTimer>
+#include <QTcpSocket>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include <QHostAddress>
+#include <QLabel>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class GameNode; }
@@ -26,19 +32,34 @@ private slots:
     void showSettingScreen();
     void onStartClicked();
 
+    // TCP Socket slots
+    void onConnected();
+    void onReadyRead();
+    void onConnectionError(QAbstractSocket::SocketError socketError);
+    void tryReconnect();
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void applyStyles();
+<<<<<<< Updated upstream
     void playTitleMusicIfNeeded();
     void stopTitleMusic();
     void setupAlsaEnvironment();
     QString findFirstSongFile() const;
     QString findAplayProgram() const;
+=======
+    void initializeSocket();
+    void registerWithServer();
+    void handleServerMessage(const QJsonObject &json);
+    void sendMessage(const QJsonObject &msg);
+    void showGmNotice(const QString &text);
+>>>>>>> Stashed changes
 
     Ui::GameNode *ui;
     QString m_teamName;
+    int m_teamId; // 서버에서 팀을 식별할 ID (예: 1, 2, 3)
 
     int m_introPageIndex;
     int m_readyPageIndex;
@@ -49,8 +70,16 @@ private:
     QTimer *m_blinkTimer;
     bool m_teamDialogOpen;
     bool m_ignoreTitleTap;
+<<<<<<< Updated upstream
     QProcess *m_titleAudioProcess;
     bool m_titleMusicStarted;
+=======
+
+    QTcpSocket m_socket;
+    QString m_serverIp;
+    quint16 m_serverPort;
+    QByteArray m_buffer;
+>>>>>>> Stashed changes
 };
 
 #endif // GAME_NODE_H

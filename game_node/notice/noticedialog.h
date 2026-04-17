@@ -1,16 +1,14 @@
 #ifndef NOTICEDIALOG_H
 #define NOTICEDIALOG_H
 
+#include <QStringList>
+
 class QWidget;
 
 class NoticeDialog
 {
 public:
-    /**
-     * Show the system notices popup dialog.
-     * @param parent  Parent widget for centering and modality.
-     */
-    static void show(QWidget *parent);
+    static void show(QWidget *parent, const QStringList &notices = {});
 };
 
 #endif // NOTICEDIALOG_H

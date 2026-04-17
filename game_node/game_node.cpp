@@ -15,6 +15,10 @@
 #include <QMouseEvent>
 #include <QEvent>
 #include <QStackedWidget>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QHostAddress>
 
 // ---------------------------------------------------------------------------
 // Constructor – Wire up pages and flow
@@ -29,8 +33,14 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
+<<<<<<< Updated upstream
     , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
+=======
+    , m_teamId(1) // Default ID (will be set explicitly or assigned by context)
+    , m_serverIp(QStringLiteral("192.168.10.10")) // 설정된 서버 IP
+    , m_serverPort(5000) // 설정된 서버 TCP 포트
+>>>>>>> Stashed changes
 {
     ui->setupUi(this);
     applyStyles();
@@ -60,9 +70,22 @@ GameNode::GameNode(QWidget *parent)
     m_readyPage = new ReadyPage();
     m_readyPageIndex = ui->stackedWidget->addWidget(m_readyPage);
 
+    // ── Set up send-message callback for CONTACT GM ────────────────────
+    m_readyPage->setSendMessageCallback([this](const QString &text) {
+        QJsonObject msg;
+        msg["type"] = "chat_message";
+        msg["sender"] = "node";
+        msg["team_id"] = m_teamId;
+        msg["team_name"] = m_teamName;
+        msg["target"] = "GM";
+        msg["text"] = text;
+        sendMessage(msg);
+    });
+
     // ── Connect emergency page confirm → go to ready page ──────────────
     QObject::connect(m_emergencyPage, &EmergencyPage::confirmed, this, [this]() {
-        m_readyPage->resetCountdown(43 * 60 + 18);
+        // 타이머는 서버에서 시작할 때까지 대기 (시간만 표시하고 카운트다운은 안 함)
+        m_readyPage->syncTimer(45 * 60, false);
         if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
         }
@@ -95,6 +118,7 @@ GameNode::GameNode(QWidget *parent)
     // Start on the title page
     ui->stackedWidget->setCurrentIndex(0);
 
+<<<<<<< Updated upstream
     QObject::connect(ui->stackedWidget, &QStackedWidget::currentChanged, this, [this](int index) {
         if (index == 0) {
             playTitleMusicIfNeeded();
@@ -109,11 +133,161 @@ GameNode::GameNode(QWidget *parent)
     });
 
     playTitleMusicIfNeeded();
+=======
+    initializeSocket();
+>>>>>>> Stashed changes
 }
 
 GameNode::~GameNode()
 {
+    m_socket.close();
     delete ui;
+}
+
+// ---------------------------------------------------------------------------
+// TCP Socket Server Communication
+// ---------------------------------------------------------------------------
+void GameNode::initializeSocket()
+{
+    connect(&m_socket, &QTcpSocket::connected, this, &GameNode::onConnected);
+    connect(&m_socket, &QTcpSocket::readyRead, this, &GameNode::onReadyRead);
+    connect(&m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred), this, &GameNode::onConnectionError);
+
+    qDebug() << "[SYSTEM] Connecting to server:" << m_serverIp << ":" << m_serverPort;
+    m_socket.connectToHost(m_serverIp, m_serverPort);
+}
+
+void GameNode::onConnected()
+{
+    qDebug() << "[SYSTEM] TCP Socket open. Registering... ";
+    registerWithServer();
+}
+
+void GameNode::sendMessage(const QJsonObject &json)
+{
+    QJsonDocument doc(json);
+    QByteArray data = doc.toJson(QJsonDocument::Compact) + "\n";
+    if (m_socket.state() == QAbstractSocket::ConnectedState) {
+        m_socket.write(data);
+        m_socket.flush();
+    }
+}
+
+void GameNode::registerWithServer()
+{
+    QJsonObject message;
+    message["type"] = "register";
+    message["role"] = "node";
+    message["team_id"] = m_teamId;
+    if (!m_teamName.isEmpty())
+        message["team_name"] = m_teamName;
+    sendMessage(message);
+}
+
+void GameNode::onReadyRead()
+{
+    m_buffer.append(m_socket.readAll());
+    
+    // Process messages split by newline
+    int newlineIndex = m_buffer.indexOf('\n');
+    while (newlineIndex != -1) {
+        QByteArray message = m_buffer.left(newlineIndex).trimmed();
+        m_buffer.remove(0, newlineIndex + 1);
+
+        if (!message.isEmpty()) {
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(message, &err);
+            
+            if(err.error != QJsonParseError::NoError || !doc.isObject()) {
+                qWarning() << "[SYSTEM] Invalid JSON:" << message;
+            } else {
+                handleServerMessage(doc.object());
+            }
+        }
+        newlineIndex = m_buffer.indexOf('\n');
+    }
+}
+
+void GameNode::handleServerMessage(const QJsonObject &json)
+{
+    QString type = json["type"].toString();
+
+    if (type == "timer_control") {
+        QString action = json["action"].toString();
+        qDebug() << "[SYSTEM] Timer action received:" << action;
+        if (m_readyPage) {
+            if (action == "start")  m_readyPage->resumeCountdown();
+            else if (action == "pause") m_readyPage->pauseCountdown();
+            else if (action == "reset") m_readyPage->resetCountdown(45 * 60);
+        }
+    }
+    else if (type == "timer_sync") {
+        int remaining = json["timeRemaining"].toInt();
+        bool running = json["running"].toBool();
+        qDebug() << "[SYSTEM] Timer sync:" << remaining << "running:" << running;
+        if (m_readyPage) {
+            m_readyPage->syncTimer(remaining, running);
+        }
+    }
+    else if (type == "chat_message") {
+        QString text = json["text"].toString();
+        QString target = json["target"].toString();
+        qDebug() << "[SYSTEM] New chat/notice:" << text << "target:" << target;
+
+        if (target == "ALL") {
+            // 전체 공지 → System Notices 배지
+            if (m_readyPage) m_readyPage->addSystemNotice(text);
+        } else {
+            // 특정 팀 대상 → Contact GM 배지
+            if (m_readyPage) m_readyPage->addGmDirectMessage(text);
+        }
+    }
+    else if (type == "progress_sync") {
+        int myProgress = json["my_progress"].toInt();
+        int avgProgress = json["avg_progress"].toInt();
+        qDebug() << "[SYSTEM] Progress sync: my=" << myProgress << "avg=" << avgProgress;
+        if (m_readyPage) {
+            m_readyPage->setMissionProgress(myProgress);
+            m_readyPage->setGlobalProgress(avgProgress);
+        }
+    }
+}
+
+void GameNode::showGmNotice(const QString &text)
+{
+    // 화면 하단에 잠깐 떴다 사라지는 알림 배너 표시
+    QLabel *banner = new QLabel(this);
+    banner->setText(QStringLiteral("[GM] ") + text);
+    banner->setStyleSheet(QStringLiteral(
+        "background-color: rgba(37,99,235,0.92); color: white; "
+        "font-size: 18px; font-weight: bold; padding: 14px 24px; "
+        "border-radius: 8px; border: 1px solid #60a5fa;"));
+    banner->setAlignment(Qt::AlignCenter);
+    banner->setWordWrap(true);
+    banner->setFixedWidth(this->width() - 40);
+    banner->adjustSize();
+    banner->move(20, this->height() - banner->height() - 30);
+    banner->raise();
+    banner->show();
+
+    // 5초 후 자동으로 사라짐
+    QTimer::singleShot(5000, banner, &QLabel::deleteLater);
+}
+
+void GameNode::onConnectionError(QAbstractSocket::SocketError socketError)
+{
+    qWarning() << "[SYSTEM] Socket error:" << m_socket.errorString();
+    tryReconnect();
+}
+
+void GameNode::tryReconnect()
+{
+    if (m_socket.state() != QAbstractSocket::ConnectedState && m_socket.state() != QAbstractSocket::ConnectingState) {
+        QTimer::singleShot(3000, this, [this]() {
+            qDebug() << "[SYSTEM] Attempting to reconnect...";
+            m_socket.connectToHost(m_serverIp, m_serverPort);
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +702,9 @@ void GameNode::onStartClicked()
         stopTitleMusic();
         m_teamName = teamName.isEmpty() ? QStringLiteral("TEAM 1") : teamName;
         m_readyPage->setTeamName(m_teamName);
+
+        // 팀명이 정해졌으므로 서버에 다시 등록하여 GM에 팀명 전달
+        registerWithServer();
 
         if (m_introPageIndex >= 0 && m_introPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_introPageIndex);
