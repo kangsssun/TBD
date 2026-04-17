@@ -136,6 +136,12 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
     if (mission) {
         m_eventLayout->addWidget(mission, 1);
         if (m_eventTitleLabel) m_eventTitleLabel->hide();
+
+        // When mission completes, advance to the next mission
+        QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {
+            auto *nextMission = new MissionPage(completedNumber + 1, this);
+            setMissionWidget(nextMission);
+        });
     } else {
         if (m_eventTitleLabel) m_eventTitleLabel->show();
     }
