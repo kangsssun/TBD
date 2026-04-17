@@ -37,8 +37,13 @@ protected:
 
 private:
     void setupMission1();
+    void setupMission2();
     void showStoryPopup();
     void showResultPopup(bool correct);
+    void showImagePopup(const QString &imagePath,
+                        const QString &btnText,
+                        const QString &btnColor,
+                        const QColor &glowColor);
     void showTerminalPopup(const QString &title,
                            const QStringList &lines,
                            const QString &btnText,
