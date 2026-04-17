@@ -13,10 +13,8 @@ unix {
     QMAKE_CFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
     QMAKE_CXXFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
 
-    SOURCES += dd_api/led_api.c \
-            dd_api/camera_api.c
+    SOURCES += dd_api/led_api.c
     HEADERS += dd_api/led_api.h
-            dd_api/camera_api.h
 }
 
 # You can make your code fail to compile if it uses deprecated APIs.
@@ -51,9 +49,6 @@ FORMS += \
 
 RESOURCES += \
     resources.qrc
-
-LIBS += \
-    -ljpeg
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
