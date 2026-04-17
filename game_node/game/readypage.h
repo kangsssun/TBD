@@ -19,6 +19,7 @@ public:
     void setTeamName(const QString &name);
     void resetCountdown(int seconds);
     void setMissionWidget(MissionPage *mission);
+    MissionPage *currentMission() const;
 
 private:
     void setupUi();

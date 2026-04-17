@@ -4,10 +4,8 @@
 #include <QWidget>
 
 class QVBoxLayout;
-class QHBoxLayout;
 class QLabel;
 class QPushButton;
-class QStackedWidget;
 class QTimer;
 
 /**
@@ -23,6 +21,9 @@ public:
 
     int missionNumber() const { return m_missionNumber; }
 
+    /** Show the story popup and start the mission. */
+    void startMission();
+
     /** Reset to story screen (for re-entry). */
     void resetToStory();
 
@@ -36,20 +37,16 @@ protected:
 
 private:
     void setupMission1();
-    void startTypingAnimation();
-    void typeNextLine();
+    void showStoryPopup();
     void showResultPopup(bool correct);
+    void showTerminalPopup(const QString &title,
+                           const QStringList &lines,
+                           const QString &btnText,
+                           const QString &btnColor,
+                           const QColor &glowColor);
 
     int m_missionNumber;
     QVBoxLayout *m_contentLayout;
-
-    // Mission 1 story terminal
-    QStackedWidget *m_missionStack;
-    QLabel *m_terminalOutput;
-    QPushButton *m_nextButton;
-    QTimer *m_typeTimer;
-    QStringList m_storyLines;
-    int m_currentLineIndex;
 
     // Mission 1 answer input
     QString m_answerInputRaw;

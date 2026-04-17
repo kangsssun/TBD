@@ -2,6 +2,7 @@
 #include "ui_game_node.h"
 #include "intro/emergencypage.h"
 #include "game/readypage.h"
+#include "game/missionpage.h"
 #include "title/teamnamedialog.h"
 
 #include <QGraphicsDropShadowEffect>
@@ -66,6 +67,10 @@ GameNode::GameNode(QWidget *parent)
         if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
         }
+        // Show story popup after page transition
+        if (m_readyPage->currentMission()) {
+            m_readyPage->currentMission()->startMission();
+        }
     });
 
     // ── When intro page becomes current, reset its animation ───────────
@@ -96,7 +101,7 @@ GameNode::GameNode(QWidget *parent)
     ui->stackedWidget->setCurrentIndex(0);
 
     QObject::connect(ui->stackedWidget, &QStackedWidget::currentChanged, this, [this](int index) {
-        if (index == 0) {
+        if (index == 0 || index == m_readyPageIndex) {
             playTitleMusicIfNeeded();
         } else {
             stopTitleMusic();

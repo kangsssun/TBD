@@ -54,12 +54,6 @@ void ReadyPage::resetCountdown(int seconds)
     } else {
         m_readyTimer->stop();
     }
-
-    // 미션 페이지를 스토리(터미널) 화면으로 초기화
-    auto *mp = qobject_cast<MissionPage *>(m_currentMissionWidget);
-    if (mp) {
-        mp->resetToStory();
-    }
 }
 
 void ReadyPage::setMissionWidget(MissionPage *mission)
@@ -272,6 +266,11 @@ QString ReadyPage::formatRemainingTime() const
     return QStringLiteral("%1:%2")
         .arg(min, 2, 10, QLatin1Char('0'))
         .arg(sec, 2, 10, QLatin1Char('0'));
+}
+
+MissionPage *ReadyPage::currentMission() const
+{
+    return qobject_cast<MissionPage *>(m_currentMissionWidget);
 }
 
 
