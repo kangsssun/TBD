@@ -25,6 +25,7 @@ public:
     void resumeCountdown();
     void syncTimer(int seconds, bool running);
     void setMissionWidget(MissionPage *mission);
+    MissionPage *currentMission() const;
 
     void addSystemNotice(const QString &text);
     void addGmDirectMessage(const QString &text);
