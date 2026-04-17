@@ -12,6 +12,9 @@ win32 {
 unix {
     QMAKE_CFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
     QMAKE_CXXFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
+
+    SOURCES += dd_api/led_api.c
+    HEADERS += dd_api/led_api.h
 }
 
 # You can make your code fail to compile if it uses deprecated APIs.

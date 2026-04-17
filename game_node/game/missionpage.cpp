@@ -16,6 +16,10 @@
 #include <QApplication>
 #include <QScreen>
 
+#ifdef Q_OS_LINUX
+#include "dd_api/led_api.h"
+#endif
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Constructor
 // ═══════════════════════════════════════════════════════════════════════════
@@ -364,6 +368,9 @@ void MissionPage::setupMission1()
 
     // ── Next button → go to problem page ───────────────────────────────
     QObject::connect(m_nextButton, &QPushButton::clicked, this, [this]() {
+#ifdef Q_OS_LINUX
+        led_show_problem();
+#endif
         m_missionStack->setCurrentIndex(1);
     });
 }
