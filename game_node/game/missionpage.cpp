@@ -77,7 +77,6 @@ void MissionPage::setupMission1()
     auto *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(16, 14, 16, 14);
     leftLayout->setSpacing(0);
-    leftLayout->setAlignment(Qt::AlignCenter);
 
     auto *imageLabel = new QLabel(leftPanel);
     imageLabel->setAlignment(Qt::AlignCenter);
@@ -92,6 +91,8 @@ void MissionPage::setupMission1()
             "min-width: 200px; min-height: 200px;"));
     }
     leftLayout->addWidget(imageLabel);
+
+    leftLayout->addStretch();
 
     // "PLAY" button — trigger LED signal (below image)
     auto *btnReplay = new QPushButton(QStringLiteral("\u25b6 PLAY"), leftPanel);
@@ -133,6 +134,7 @@ void MissionPage::setupMission1()
 
     leftLayout->addSpacing(20);
     leftLayout->addWidget(btnReplay, 0, Qt::AlignCenter);
+    leftLayout->addSpacing(14);
 
     bodyRow->addWidget(leftPanel, 1);
 
@@ -448,7 +450,7 @@ void MissionPage::showStoryPopup()
                               "<span style='color:#00ff41; %1'>LG인으로 첫 발을 내딛는 모습을 지켜봐 왔습니다.</span>").arg(sf)
             << QString()
             << QStringLiteral("<span style='color:#666; %1'>[17:22:16]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>멜로디를 듣고 알파벳으로 변환하여 입력하십시오.</span>").arg(sf)
+                              "<span style='color:#eab308; %1'>멜로디를 듣고 알파벳으로 변환하여 입력하십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SECURITY_TERMINAL.exe"),
@@ -707,7 +709,7 @@ void MissionPage::setupMission2()
     problemLayout->setSpacing(6);
 
     // Header
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 2단계 인증"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 2단계 인증: 보안 멜로디"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
@@ -732,7 +734,6 @@ void MissionPage::setupMission2()
     auto *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(16, 14, 16, 14);
     leftLayout->setSpacing(0);
-    leftLayout->setAlignment(Qt::AlignCenter);
 
     auto *placeholderLabel = new QLabel(QStringLiteral("[ MISSION 2 ]"), leftPanel);
     placeholderLabel->setAlignment(Qt::AlignCenter);
@@ -740,6 +741,40 @@ void MissionPage::setupMission2()
         "color: #444; font-size: 20px; font-weight: 600; "
         "font-family: 'Consolas', monospace; background: transparent; border: none;"));
     leftLayout->addWidget(placeholderLabel);
+
+    leftLayout->addStretch();
+
+    // "PLAY" button — trigger buzzer melody (below placeholder)
+    auto *btnPlay = new QPushButton(QStringLiteral("\u25b6 PLAY"), leftPanel);
+    btnPlay->setCursor(Qt::PointingHandCursor);
+    btnPlay->setFocusPolicy(Qt::NoFocus);
+    btnPlay->setAutoRepeat(false);
+    btnPlay->setFixedSize(200, 48);
+    btnPlay->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: #0a1a28; color: #00bfff; border: 1px solid #00bfff; "
+        "border-radius: 6px; font-size: 18px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; }"
+        "QPushButton:pressed { background-color: #0099cc; color: #0c0c0c; }"
+        "QPushButton:disabled { background-color: #111; color: #555; border: 1px solid #333; }")
+    );
+
+    auto *playGlow = new QGraphicsDropShadowEffect(btnPlay);
+    playGlow->setBlurRadius(16);
+    playGlow->setColor(QColor(0, 191, 255, 140));
+    playGlow->setOffset(0, 0);
+    btnPlay->setGraphicsEffect(playGlow);
+
+    QObject::connect(btnPlay, &QPushButton::clicked, this, [btnPlay]() {
+        btnPlay->setEnabled(false);
+        // TODO: trigger buzzer melody here
+        QTimer::singleShot(3000, btnPlay, [btnPlay]() {
+            btnPlay->setEnabled(true);
+        });
+    });
+
+    leftLayout->addSpacing(20);
+    leftLayout->addWidget(btnPlay, 0, Qt::AlignCenter);
+    leftLayout->addSpacing(14);
 
     bodyRow->addWidget(leftPanel, 1);
 
