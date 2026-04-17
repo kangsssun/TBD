@@ -76,6 +76,7 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
         QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {
             auto *nextMission = new MissionPage(completedNumber + 1, this);
             setMissionWidget(nextMission);
+            nextMission->startMission();
         });
     } else {
         if (m_eventTitleLabel) m_eventTitleLabel->show();

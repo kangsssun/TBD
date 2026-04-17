@@ -4,6 +4,7 @@
         <file>images/devil.png</file>
         <file>images/misson_1.png</file>
         <file>images/mission1_complete.png</file>
+        <file>images/mission2_complete.png</file>
         <file>fonts/NotoSansKR-Regular.ttf</file>
     </qresource>
 </RCC>

@@ -421,13 +421,11 @@ void MissionPage::showStoryPopup()
                               "<span style='color:#00ff41; %1'>손상된 장치에서 마지막 통신 로그가 복구되었습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:20:47]</span>&nbsp;&nbsp;"
                               "<span style='color:#00ff41; %1'>장애 직전 비콘이 수신한 신호 데이터가 남아있습니다.</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:20:48]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>LED 점멸 신호를 해독하여 1단계 인증 코드를 입력하십시오.</span>").arg(sf)
             << QString()
-            << QStringLiteral("<span style='color:#666; %1'>[17:20:48]</span>&nbsp;&nbsp;"
+            << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
                               "<span style='color:#00bfff; %1'>LED 점멸 신호를 해독하여 1단계 인증 코드를 입력하십시오.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:20:50]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00bfff; %1'>LED 점멸 신호는 PLAY 버튼 클릭 시 LED 2 부분에 나타납니다.</span>").arg(sf)
+                              "<span style='color:#00bfff; %1'>LED 점멸 신호는 PLAY 버튼 클릭 시 LED 2 부분에 나타납니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SECURITY_TERMINAL.exe"),
@@ -447,12 +445,10 @@ void MissionPage::showStoryPopup()
             << QStringLiteral("<span style='color:#666; %1'>[17:22:13]</span>&nbsp;&nbsp;"
                               "<span style='color:#00ff41; %1'>암호를 설정한 존재는 여러분 곁에서</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:22:14]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>LG인으로 첫 발을 내딱는 모습을 지켜봐 왓습니다.</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>LG인으로 첫 발을 내딛는 모습을 지켜봐 왔습니다.</span>").arg(sf)
             << QString()
             << QStringLiteral("<span style='color:#666; %1'>[17:22:16]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>멜로디를 듣고 알파벳으로 변환하여</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:22:17]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>입력하십시오.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>멜로디를 듣고 알파벳으로 변환하여 입력하십시오.</span>").arg(sf)
 
         showTerminalPopup(
             QStringLiteral("SECURITY_TERMINAL.exe"),
@@ -485,9 +481,8 @@ void MissionPage::showResultPopup(bool correct)
                 << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
                                   "<span style='color:#00ff41; %1'>신호를 해독했습니다.</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:21:17]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#00ff41; %1'>그런데... 비콘이 단순 장애라기엔</span>").arg(sf)
-                << QStringLiteral("<span style='color:#666; %1'>[17:21:18]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#00ff41; %1'>갉힌 흔적이 있습니다.</span>").arg(sf)
+                                  "<span style='color:#00ff41; %1'>그런데... 비콘이 단순 장애라기엔 갉힌 흔적이 있습니다.</span>").arg(sf)
+
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:21:19]</span>&nbsp;&nbsp;"
                                   "<span style='color:#eab308; %1'>누군가 의도적으로 망가뜨린 것 같습니다.</span>").arg(sf);
@@ -516,9 +511,8 @@ void MissionPage::showResultPopup(bool correct)
                                   "<span style='color:#ff4444; %1'>1단계 인증 실패</span>").arg(sf)
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#ff4444; %1'>입력한 코드가 등록된 신호와</span>").arg(sf)
-                << QStringLiteral("<span style='color:#666; %1'>[17:21:17]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#ff4444; %1'>일치하지 않습니다.</span>").arg(sf)
+                                  "<span style='color:#ff4444; %1'>입력한 코드가 등록된 신호와 일치하지 않습니다.</span>").arg(sf)
+
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:21:18]</span>&nbsp;&nbsp;"
                                   "<span style='color:#eab308; %1'>신호를 처음부터 다시 확인하십시오.</span>").arg(sf);
@@ -541,9 +535,8 @@ void MissionPage::showResultPopup(bool correct)
                 << QStringLiteral("<span style='color:#666; %1'>[17:23:32]</span>&nbsp;&nbsp;"
                                   "<span style='color:#00ff41; %1'>멜로디를 해독했습니다.</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:23:33]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#00ff41; %1'>단말기 주변에서 정체불명의 털 뭉치가</span>").arg(sf)
-                << QStringLiteral("<span style='color:#666; %1'>[17:23:34]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#00ff41; %1'>발견되었습니다.</span>").arg(sf)
+                                  "<span style='color:#00ff41; %1'>단말기 주변에서 정체불명의 털 뭉치가 발견되었습니다.</span>").arg(sf)
+
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:23:35]</span>&nbsp;&nbsp;"
                                   "<span style='color:#eab308; %1'>교육 담당자 분들이 당황해 하고 있습니다.</span>").arg(sf);
@@ -551,6 +544,12 @@ void MissionPage::showResultPopup(bool correct)
             showTerminalPopup(
                 QStringLiteral("SYSTEM_VERIFY.exe"),
                 resultLines,
+                QStringLiteral("\u25b6 확인"),
+                QStringLiteral("#00ff41"),
+                QColor(0, 255, 65, 140));
+
+            showImagePopup(
+                QStringLiteral(":/images/mission2_complete.png"),
                 QStringLiteral("\u25b6 확인"),
                 QStringLiteral("#00ff41"),
                 QColor(0, 255, 65, 140));
@@ -566,9 +565,8 @@ void MissionPage::showResultPopup(bool correct)
                                   "<span style='color:#ff4444; %1'>2단계 청각 인증 실패</span>").arg(sf)
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:23:32]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#ff4444; %1'>입력한 알파벳 시퀀스가 등록된</span>").arg(sf)
-                << QStringLiteral("<span style='color:#666; %1'>[17:23:33]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#ff4444; %1'>키워드와 일치하지 않습니다.</span>").arg(sf)
+                                  "<span style='color:#ff4444; %1'>입력한 알파벳 시퀀스가 등록된 키워드와 일치하지 않습니다.</span>").arg(sf)
+    
                 << QString()
                 << QStringLiteral("<span style='color:#666; %1'>[17:23:34]</span>&nbsp;&nbsp;"
                                   "<span style='color:#eab308; %1'>멜로디를 다시 재생해보세요.</span>").arg(sf)
@@ -700,7 +698,7 @@ void MissionPage::startMission()
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::setupMission2()
 {
-    m_correctAnswer = QStringLiteral(""); // TODO: set correct answer
+    m_correctAnswer = QStringLiteral("LUCKY");
 
     auto *problemPage = new QWidget(this);
     problemPage->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
