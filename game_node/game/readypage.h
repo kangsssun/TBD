@@ -35,6 +35,7 @@ private:
 
     QVBoxLayout *m_eventLayout;    // layout inside eventContainer, for injecting missions
     QWidget *m_currentMissionWidget;
+    QLabel *m_eventTitleLabel;
 };
 
 #endif // READYPAGE_H

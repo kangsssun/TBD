@@ -22,6 +22,7 @@ ReadyPage::ReadyPage(QWidget *parent)
     , m_remainingSeconds(0)
     , m_eventLayout(nullptr)
     , m_currentMissionWidget(nullptr)
+    , m_eventTitleLabel(nullptr)
 {
     setupUi();
     setMissionWidget(new MissionPage(1, this));
@@ -75,6 +76,9 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
     m_currentMissionWidget = mission;
     if (mission) {
         m_eventLayout->addWidget(mission, 1);
+        if (m_eventTitleLabel) m_eventTitleLabel->hide();
+    } else {
+        if (m_eventTitleLabel) m_eventTitleLabel->show();
     }
 }
 
@@ -235,6 +239,7 @@ void ReadyPage::setupUi()
     auto *eventTitle = new QLabel(QStringLiteral("MISSION 1 - SYSTEM RECOVERY"), eventContainer);
     eventTitle->setObjectName(QStringLiteral("eventTitleLabel"));
     eventTitle->setAlignment(Qt::AlignCenter);
+    m_eventTitleLabel = eventTitle;
     m_eventLayout->addWidget(eventTitle);
 
     // ── Assemble main panel ────────────────────────────────────────────

@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>images/title.png</file>
         <file>images/devil.png</file>
+        <file>images/misson_1.png</file>
         <file>fonts/NotoSansKR-Regular.ttf</file>
     </qresource>
 </RCC>

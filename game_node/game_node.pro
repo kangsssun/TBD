@@ -23,6 +23,7 @@ INCLUDEPATH += $$PWD
 SOURCES += \
     main.cpp \
     game_node.cpp \
+    keyboard/keyboardpanel.cpp \
     title/teamnamedialog.cpp \
     intro/emergencypage.cpp \
     game/readypage.cpp \
@@ -32,6 +33,7 @@ SOURCES += \
 
 HEADERS += \
     game_node.h \
+    keyboard/keyboardpanel.h \
     title/teamnamedialog.h \
     intro/emergencypage.h \
     game/readypage.h \

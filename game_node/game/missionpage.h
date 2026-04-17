@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QVBoxLayout;
+class QHBoxLayout;
 class QLabel;
 class QPushButton;
 class QStackedWidget;
@@ -37,6 +38,7 @@ private:
     void setupMission1();
     void startTypingAnimation();
     void typeNextLine();
+    void showResultPopup(bool correct);
 
     int m_missionNumber;
     QVBoxLayout *m_contentLayout;
@@ -48,6 +50,10 @@ private:
     QTimer *m_typeTimer;
     QStringList m_storyLines;
     int m_currentLineIndex;
+
+    // Mission 1 answer input
+    QString m_answerInputRaw;
+    QString m_correctAnswer;
 };
 
 #endif // MISSIONPAGE_H
