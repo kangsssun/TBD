@@ -12,6 +12,7 @@
 #include <QScreen>
 #include <QTimer>
 #include <functional>
+#include <memory>
 
 namespace {
 
@@ -290,11 +291,14 @@ KeyboardPanel buildKeyboardPanel(
         QStringLiteral("ㅋㅌㅊㅍㅠㅜㅡ")
     };
 
-    bool uppercaseMode = true;
-    bool koreanMode = true;
-    bool koreanShiftMode = false;
-    QList<QPushButton *> alphabetKeys;
-    QList<QPushButton *> koreanShiftKeys;
+    struct KeyboardState {
+        bool uppercaseMode = true;
+        bool koreanMode = true;
+        bool koreanShiftMode = false;
+        QList<QPushButton *> alphabetKeys;
+        QList<QPushButton *> koreanShiftKeys;
+    };
+    auto ks = std::make_shared<KeyboardState>();
 
     auto *keypadContainer = new QWidget(dialog);
     keypadContainer->setObjectName(QStringLiteral("teamKeypadContainer"));
@@ -313,8 +317,8 @@ KeyboardPanel buildKeyboardPanel(
         appendCharacter,
         true,
         false,
-        alphabetKeys,
-        koreanShiftKeys));
+        ks->alphabetKeys,
+        ks->koreanShiftKeys));
     keyboardPages->addWidget(createKeyboardPage(
         keypadContainer,
         koreanRows,
@@ -322,13 +326,13 @@ KeyboardPanel buildKeyboardPanel(
         appendCharacter,
         false,
         true,
-        alphabetKeys,
-        koreanShiftKeys));
+        ks->alphabetKeys,
+        ks->koreanShiftKeys));
     keyboardPages->setCurrentIndex(1);
     keypadLayout->addWidget(keyboardPages);
 
-    auto refreshKoreanShiftKeys = [&koreanShiftKeys](bool shiftOn) {
-        for (auto *key : koreanShiftKeys) {
+    auto refreshKoreanShiftKeys = [ks](bool shiftOn) {
+        for (auto *key : ks->koreanShiftKeys) {
             const QString nextText = shiftOn
                 ? key->property("shiftChar").toString()
                 : key->property("baseChar").toString();
@@ -353,15 +357,15 @@ KeyboardPanel buildKeyboardPanel(
     btnCaseToggle->setCursor(Qt::PointingHandCursor);
     btnCaseToggle->setFocusPolicy(Qt::NoFocus);
     btnCaseToggle->setAutoRepeat(false);
-    connectDebouncedReleased(btnCaseToggle, [&uppercaseMode, &alphabetKeys, &koreanMode, &koreanShiftMode, btnCaseToggle, refreshKoreanShiftKeys]() {
-        if (koreanMode) {
-            koreanShiftMode = !koreanShiftMode;
-            refreshKoreanShiftKeys(koreanShiftMode);
-            btnCaseToggle->setText(koreanShiftMode ? QStringLiteral("SHIFT") : QStringLiteral("Shift"));
+    connectDebouncedReleased(btnCaseToggle, [ks, btnCaseToggle, refreshKoreanShiftKeys]() {
+        if (ks->koreanMode) {
+            ks->koreanShiftMode = !ks->koreanShiftMode;
+            refreshKoreanShiftKeys(ks->koreanShiftMode);
+            btnCaseToggle->setText(ks->koreanShiftMode ? QStringLiteral("SHIFT") : QStringLiteral("Shift"));
         } else {
-            uppercaseMode = !uppercaseMode;
-            for (auto *alphabetKey : alphabetKeys) {
-                const QString nextText = uppercaseMode
+            ks->uppercaseMode = !ks->uppercaseMode;
+            for (auto *alphabetKey : ks->alphabetKeys) {
+                const QString nextText = ks->uppercaseMode
                     ? alphabetKey->property("upperChar").toString()
                     : alphabetKey->property("lowerChar").toString();
                 alphabetKey->setText(nextText);
@@ -376,12 +380,12 @@ KeyboardPanel buildKeyboardPanel(
     btnLanguageToggle->setCursor(Qt::PointingHandCursor);
     btnLanguageToggle->setFocusPolicy(Qt::NoFocus);
     btnLanguageToggle->setAutoRepeat(false);
-    connectDebouncedReleased(btnLanguageToggle, [&koreanMode, &koreanShiftMode, keyboardPages, btnLanguageToggle, btnCaseToggle, refreshKoreanShiftKeys]() {
-        koreanMode = !koreanMode;
-        keyboardPages->setCurrentIndex(koreanMode ? 1 : 0);
-        btnLanguageToggle->setText(koreanMode ? QStringLiteral("영/한") : QStringLiteral("한/영"));
-        if (koreanMode) {
-            koreanShiftMode = false;
+    connectDebouncedReleased(btnLanguageToggle, [ks, keyboardPages, btnLanguageToggle, btnCaseToggle, refreshKoreanShiftKeys]() {
+        ks->koreanMode = !ks->koreanMode;
+        keyboardPages->setCurrentIndex(ks->koreanMode ? 1 : 0);
+        btnLanguageToggle->setText(ks->koreanMode ? QStringLiteral("영/한") : QStringLiteral("한/영"));
+        if (ks->koreanMode) {
+            ks->koreanShiftMode = false;
             refreshKoreanShiftKeys(false);
             btnCaseToggle->setText(QStringLiteral("Shift"));
         } else {
@@ -469,9 +473,9 @@ QString TeamNameDialog::getTeamName(QWidget *parent, bool *accepted)
     const int scaledTitleFont = qMax(18, qRound(28.0 * uiScale));
     const int scaledTitleTopPad = qMax(1, qRound(4.0 * uiScale));
     const int scaledTitleBottomPad = qMax(2, qRound(8.0 * uiScale));
-    const int scaledInputFont = qMax(14, qRound(22.0 * uiScale));
-    const int scaledInputVPad = qMax(6, qRound(14.0 * uiScale));
-    const int scaledInputHPad = qMax(6, qRound(16.0 * uiScale));
+    const int scaledInputFont = qMax(14, qRound(18.0 * uiScale));
+    const int scaledInputVPad = qMax(4, qRound(8.0 * uiScale));
+    const int scaledInputHPad = qMax(4, qRound(10.0 * uiScale));
 
     auto scaledSize = [uiScale](int value, int minValue) {
         return qMax(minValue, qRound(static_cast<qreal>(value) * uiScale));
@@ -515,8 +519,9 @@ QString TeamNameDialog::getTeamName(QWidget *parent, bool *accepted)
     lineEdit->setObjectName(QStringLiteral("teamNameLineEdit"));
     lineEdit->setAlignment(Qt::AlignCenter);
     lineEdit->setReadOnly(true);
-    lineEdit->setMinimumHeight(scaledSize(72, 42));
-    lineEdit->setMaximumWidth(scaledSize(640, 360));
+    lineEdit->setMinimumHeight(scaledSize(48, 32));
+    lineEdit->setFixedHeight(scaledSize(48, 32));
+    lineEdit->setMaximumWidth(scaledSize(520, 300));
     lineEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     lineEdit->setStyleSheet(QStringLiteral("font-size:%1px; padding:%2px %3px;")
                                 .arg(qMax(18, scaledInputFont))

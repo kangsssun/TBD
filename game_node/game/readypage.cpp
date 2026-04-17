@@ -53,6 +53,12 @@ void ReadyPage::resetCountdown(int seconds)
     } else {
         m_readyTimer->stop();
     }
+
+    // 미션 페이지를 스토리(터미널) 화면으로 초기화
+    auto *mp = qobject_cast<MissionPage *>(m_currentMissionWidget);
+    if (mp) {
+        mp->resetToStory();
+    }
 }
 
 void ReadyPage::setMissionWidget(MissionPage *mission)
@@ -79,14 +85,14 @@ void ReadyPage::setupUi()
 {
     setObjectName(QStringLiteral("readyPage"));
     auto *readyPageLayout = new QVBoxLayout(this);
-    readyPageLayout->setContentsMargins(14, 14, 14, 14);
+    readyPageLayout->setContentsMargins(8, 8, 8, 8);
     readyPageLayout->setSpacing(0);
 
     auto *mainPanel = new QWidget(this);
     mainPanel->setObjectName(QStringLiteral("hackerMainPanel"));
     auto *mainPanelLayout = new QVBoxLayout(mainPanel);
-    mainPanelLayout->setContentsMargins(20, 20, 20, 20);
-    mainPanelLayout->setSpacing(14);
+    mainPanelLayout->setContentsMargins(12, 10, 12, 10);
+    mainPanelLayout->setSpacing(8);
 
     // ── Top bar ────────────────────────────────────────────────────────
     auto *topBar = new QWidget(mainPanel);
@@ -223,8 +229,8 @@ void ReadyPage::setupUi()
     auto *eventContainer = new QWidget(mainPanel);
     eventContainer->setObjectName(QStringLiteral("eventContainer"));
     m_eventLayout = new QVBoxLayout(eventContainer);
-    m_eventLayout->setContentsMargins(28, 28, 28, 28);
-    m_eventLayout->setSpacing(16);
+    m_eventLayout->setContentsMargins(8, 8, 8, 8);
+    m_eventLayout->setSpacing(8);
 
     auto *eventTitle = new QLabel(QStringLiteral("MISSION 1 - SYSTEM RECOVERY"), eventContainer);
     eventTitle->setObjectName(QStringLiteral("eventTitleLabel"));

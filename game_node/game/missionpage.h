@@ -4,13 +4,13 @@
 #include <QWidget>
 
 class QVBoxLayout;
+class QLabel;
+class QPushButton;
+class QStackedWidget;
+class QTimer;
 
 /**
  * @brief Base class for all mission pages.
- *
- * Subclass this to create Mission1, Mission2, Mission3, etc.
- * Each mission should override setupMission() to build its own UI
- * and implement checkAnswer() for answer validation.
  */
 class MissionPage : public QWidget
 {
@@ -22,27 +22,32 @@ public:
 
     int missionNumber() const { return m_missionNumber; }
 
-signals:
-    /** Emitted when the player successfully completes this mission. */
-    void missionCompleted(int missionNumber);
+    /** Reset to story screen (for re-entry). */
+    void resetToStory();
 
-    /** Emitted when the player fails this mission. */
+signals:
+    void missionCompleted(int missionNumber);
     void missionFailed(int missionNumber);
 
 protected:
-    /**
-     * Override this to build mission-specific UI.
-     * Called automatically from the constructor.
-     * Use contentLayout() to add widgets.
-     */
     virtual void setupMission();
-
-    /** Returns the layout inside the mission content area. */
     QVBoxLayout *contentLayout() const { return m_contentLayout; }
 
 private:
+    void setupMission1();
+    void startTypingAnimation();
+    void typeNextLine();
+
     int m_missionNumber;
     QVBoxLayout *m_contentLayout;
+
+    // Mission 1 story terminal
+    QStackedWidget *m_missionStack;
+    QLabel *m_terminalOutput;
+    QPushButton *m_nextButton;
+    QTimer *m_typeTimer;
+    QStringList m_storyLines;
+    int m_currentLineIndex;
 };
 
 #endif // MISSIONPAGE_H

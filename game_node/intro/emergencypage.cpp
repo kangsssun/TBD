@@ -57,9 +57,10 @@ void EmergencyPage::setupUi()
     storyLayout->setSpacing(0);
 
     auto *storyLabel = new QLabel(
-        QStringLiteral("때는 3025년, SW 교육 과정 마지막 날.\n\n"
-                       "긴급 점검이라는 안내와 함께\n"
-                       "건물의 모든 출입문이 봉쇄되었다.\n\n"
+        QStringLiteral("LG전자 SW bootcamp 12기에 긴급 공문이 내려왔다.\n\n"
+                       "때는 2026년 SW Boot Camp 수료식 당일..\n\n"
+                       "모든 교육을 마치고 드디어 퇴근하려는 순간, 퇴실 비콘이 먹통 됐다.\n\n"
+                       "비콘 뿐만 아니라 패스트파이브 엘리베이터도, 출입문도 전부 잠겼다.\n\n"
                        "남은 시간 안에 시스템 복구 코드를 찾아 탈출하라.\n\n"
                        "실패하면, 영원히 이곳에 갇힌다."),
         m_storyLayer);
@@ -258,9 +259,7 @@ void EmergencyPage::setupUi()
         m_storyFlashEffect->setOpacity(1.0);
         m_storyLayer->hide();
         m_dimLayer->show();
-        m_flashLayer->show();
-        m_stack->setCurrentWidget(m_flashLayer);
-        m_pulseAnim->start();
+        m_stack->setCurrentWidget(m_dimLayer);
     });
 
     QObject::connect(m_pulseAnim, &QSequentialAnimationGroup::finished, this, [this]() {
@@ -300,9 +299,9 @@ void EmergencyPage::stopMusic()
     m_musicStarted = false;
     if (m_audioProcess->state() != QProcess::NotRunning) {
         m_audioProcess->terminate();
-        if (!m_audioProcess->waitForFinished(300)) {
+        if (!m_audioProcess->waitForFinished(1500)) {
             m_audioProcess->kill();
-            m_audioProcess->waitForFinished(300);
+            m_audioProcess->waitForFinished(1000);
         }
     }
 }
@@ -377,8 +376,11 @@ void EmergencyPage::playEmergencyMusic()
     }
 
     if (m_audioProcess->state() != QProcess::NotRunning) {
-        m_audioProcess->kill();
-        m_audioProcess->waitForFinished(300);
+        m_audioProcess->terminate();
+        if (!m_audioProcess->waitForFinished(1500)) {
+            m_audioProcess->kill();
+            m_audioProcess->waitForFinished(1000);
+        }
     }
 
     const QString aplay = findAplayProgram();

@@ -162,9 +162,10 @@ void GameNode::applyStyles()
             color: #f8fafc;
             border: 1px solid #1f2937;
             border-radius: 10px;
-            padding: 12px 18px;
+            padding: 0px 18px;
             font-size: 24px;
             selection-background-color: #2563eb;
+            qproperty-alignment: AlignCenter;
         }
 
         QLineEdit#teamNameLineEdit:focus {
@@ -610,8 +611,11 @@ void GameNode::playTitleMusicIfNeeded()
     }
 
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
-        m_titleAudioProcess->kill();
-        m_titleAudioProcess->waitForFinished(300);
+        m_titleAudioProcess->terminate();
+        if (!m_titleAudioProcess->waitForFinished(1500)) {
+            m_titleAudioProcess->kill();
+            m_titleAudioProcess->waitForFinished(1000);
+        }
     }
 
     const QString aplay = findAplayProgram();
@@ -626,9 +630,9 @@ void GameNode::stopTitleMusic()
     m_titleMusicStarted = false;
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
         m_titleAudioProcess->terminate();
-        if (!m_titleAudioProcess->waitForFinished(300)) {
+        if (!m_titleAudioProcess->waitForFinished(1500)) {
             m_titleAudioProcess->kill();
-            m_titleAudioProcess->waitForFinished(300);
+            m_titleAudioProcess->waitForFinished(1000);
         }
     }
 }
