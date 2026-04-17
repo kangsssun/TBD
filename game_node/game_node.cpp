@@ -33,14 +33,11 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
-<<<<<<< Updated upstream
     , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
-=======
-    , m_teamId(1) // Default ID (will be set explicitly or assigned by context)
-    , m_serverIp(QStringLiteral("192.168.10.10")) // 설정된 서버 IP
-    , m_serverPort(5000) // 설정된 서버 TCP 포트
->>>>>>> Stashed changes
+    , m_teamId(1)
+    , m_serverIp(QStringLiteral("192.168.10.10"))
+    , m_serverPort(5000)
 {
     ui->setupUi(this);
     applyStyles();
@@ -118,7 +115,6 @@ GameNode::GameNode(QWidget *parent)
     // Start on the title page
     ui->stackedWidget->setCurrentIndex(0);
 
-<<<<<<< Updated upstream
     QObject::connect(ui->stackedWidget, &QStackedWidget::currentChanged, this, [this](int index) {
         if (index == 0) {
             playTitleMusicIfNeeded();
@@ -133,9 +129,7 @@ GameNode::GameNode(QWidget *parent)
     });
 
     playTitleMusicIfNeeded();
-=======
     initializeSocket();
->>>>>>> Stashed changes
 }
 
 GameNode::~GameNode()

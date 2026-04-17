@@ -43,19 +43,16 @@ protected:
 
 private:
     void applyStyles();
-<<<<<<< Updated upstream
     void playTitleMusicIfNeeded();
     void stopTitleMusic();
     void setupAlsaEnvironment();
     QString findFirstSongFile() const;
     QString findAplayProgram() const;
-=======
     void initializeSocket();
     void registerWithServer();
     void handleServerMessage(const QJsonObject &json);
     void sendMessage(const QJsonObject &msg);
     void showGmNotice(const QString &text);
->>>>>>> Stashed changes
 
     Ui::GameNode *ui;
     QString m_teamName;
@@ -70,16 +67,13 @@ private:
     QTimer *m_blinkTimer;
     bool m_teamDialogOpen;
     bool m_ignoreTitleTap;
-<<<<<<< Updated upstream
     QProcess *m_titleAudioProcess;
     bool m_titleMusicStarted;
-=======
 
     QTcpSocket m_socket;
     QString m_serverIp;
     quint16 m_serverPort;
     QByteArray m_buffer;
->>>>>>> Stashed changes
 };
 
 #endif // GAME_NODE_H

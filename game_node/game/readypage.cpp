@@ -22,16 +22,13 @@ ReadyPage::ReadyPage(QWidget *parent)
     , m_remainingSeconds(0)
     , m_eventLayout(nullptr)
     , m_currentMissionWidget(nullptr)
-<<<<<<< Updated upstream
     , m_eventTitleLabel(nullptr)
-=======
     , m_systemNoticesButton(nullptr)
     , m_contactGmButton(nullptr)
     , m_missionPercentLabel(nullptr)
     , m_globalPercentLabel(nullptr)
     , m_unreadNotices(0)
     , m_unreadMessages(0)
->>>>>>> Stashed changes
 {
     setupUi();
     setMissionWidget(new MissionPage(1, this));

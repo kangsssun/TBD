@@ -49,9 +49,7 @@ private:
 
     QVBoxLayout *m_eventLayout;
     QWidget *m_currentMissionWidget;
-<<<<<<< Updated upstream
     QLabel *m_eventTitleLabel;
-=======
 
     QPushButton *m_systemNoticesButton;
     QPushButton *m_contactGmButton;
@@ -62,7 +60,6 @@ private:
     QStringList m_notices;
     QStringList m_directMessages;
     std::function<void(const QString &)> m_sendMessageCb;
->>>>>>> Stashed changes
 };
 
 #endif // READYPAGE_H
