@@ -2,6 +2,7 @@
 #define GAME_NODE_H
 
 #include <QWidget>
+#include <QProcess>
 #include <QTimer>
 
 QT_BEGIN_NAMESPACE
@@ -30,6 +31,11 @@ protected:
 
 private:
     void applyStyles();
+    void playTitleMusicIfNeeded();
+    void stopTitleMusic();
+    void setupAlsaEnvironment();
+    QString findFirstSongFile() const;
+    QString findAplayProgram() const;
 
     Ui::GameNode *ui;
     QString m_teamName;
@@ -43,6 +49,8 @@ private:
     QTimer *m_blinkTimer;
     bool m_teamDialogOpen;
     bool m_ignoreTitleTap;
+    QProcess *m_titleAudioProcess;
+    bool m_titleMusicStarted;
 };
 
 #endif // GAME_NODE_H

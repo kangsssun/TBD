@@ -6,6 +6,11 @@
 
 #include <QGraphicsDropShadowEffect>
 #include <QGraphicsOpacityEffect>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QFileInfoList>
+#include <QProcess>
 #include <QTimer>
 #include <QMouseEvent>
 #include <QEvent>
@@ -24,9 +29,23 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
+    , m_titleAudioProcess(new QProcess(this))
+    , m_titleMusicStarted(false)
 {
     ui->setupUi(this);
     applyStyles();
+    setupAlsaEnvironment();
+
+    // 재생 완료 시 자동 루프 (aplay는 루프 옵션이 없으므로 finished 시그널로 반복)
+    QObject::connect(m_titleAudioProcess,
+                     QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                     this, [this](int /*exitCode*/, QProcess::ExitStatus /*status*/) {
+        if (m_titleMusicStarted) {
+            // 아직 타이틀 화면이면 다시 재생
+            m_titleMusicStarted = false;
+            playTitleMusicIfNeeded();
+        }
+    });
     ui->titlePage->installEventFilter(this);
     ui->labelStartGame->installEventFilter(this);
 
@@ -75,6 +94,21 @@ GameNode::GameNode(QWidget *parent)
 
     // Start on the title page
     ui->stackedWidget->setCurrentIndex(0);
+
+    QObject::connect(ui->stackedWidget, &QStackedWidget::currentChanged, this, [this](int index) {
+        if (index == 0) {
+            playTitleMusicIfNeeded();
+        } else {
+            stopTitleMusic();
+        }
+
+        // 긴급재난 화면을 벗어나면 음악 정지
+        if (index != m_introPageIndex && m_emergencyPage) {
+            m_emergencyPage->stopMusic();
+        }
+    });
+
+    playTitleMusicIfNeeded();
 }
 
 GameNode::~GameNode()
@@ -490,6 +524,7 @@ void GameNode::onStartClicked()
     QTimer::singleShot(200, this, [this]() { m_ignoreTitleTap = false; });
 
     if (accepted) {
+        stopTitleMusic();
         m_teamName = teamName.isEmpty() ? QStringLiteral("TEAM 1") : teamName;
         m_readyPage->setTeamName(m_teamName);
 
@@ -500,6 +535,100 @@ void GameNode::onStartClicked()
             ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
         } else {
             showAnswerInputScreen();
+        }
+    }
+}
+
+QString GameNode::findFirstSongFile() const
+{
+    const QStringList baseDirs = {
+        QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/songs")),
+        QStringLiteral("/mnt/nfs/songs")
+    };
+
+    for (const QString &dirPath : baseDirs) {
+        const QString filePath = QDir::cleanPath(dirPath + QStringLiteral("/title.wav"));
+        if (QFileInfo::exists(filePath)) {
+            return filePath;
+        }
+    }
+
+    return QString();
+}
+
+QString GameNode::findAplayProgram() const
+{
+    const QStringList candidates = {
+        QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/aplay")),
+        QStringLiteral("/mnt/nfs/aplay"),
+        QStringLiteral("aplay")
+    };
+
+    for (const QString &candidate : candidates) {
+        if (candidate == QStringLiteral("aplay") || QFileInfo::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return QStringLiteral("aplay");
+}
+
+void GameNode::setupAlsaEnvironment()
+{
+    // aplay 실행 시 필요한 ALSA 환경변수를 QProcess에 설정
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+
+    env.insert(QStringLiteral("ALSA_CONFIG_PATH"),
+               QStringLiteral("/mnt/nfs/alsa-lib/share/alsa/alsa.conf"));
+
+    QString ldPath = env.value(QStringLiteral("LD_LIBRARY_PATH"));
+    const QStringList alsaLibPaths = {
+        QStringLiteral("/mnt/nfs/alsa-lib/lib"),
+        QStringLiteral("/mnt/nfs/alsa-lib/lib/alsa-lib"),
+        QStringLiteral("/mnt/nfs/alsa-lib/lib/alsa-lib/smixer")
+    };
+    for (const QString &p : alsaLibPaths) {
+        if (!ldPath.contains(p)) {
+            if (!ldPath.isEmpty()) ldPath += QLatin1Char(':');
+            ldPath += p;
+        }
+    }
+    env.insert(QStringLiteral("LD_LIBRARY_PATH"), ldPath);
+
+    m_titleAudioProcess->setProcessEnvironment(env);
+}
+
+void GameNode::playTitleMusicIfNeeded()
+{
+    if (m_titleMusicStarted) {
+        return;
+    }
+
+    const QString songFile = findFirstSongFile();
+    if (songFile.isEmpty()) {
+        return;
+    }
+
+    if (m_titleAudioProcess->state() != QProcess::NotRunning) {
+        m_titleAudioProcess->kill();
+        m_titleAudioProcess->waitForFinished(300);
+    }
+
+    const QString aplay = findAplayProgram();
+    const QStringList args = { QStringLiteral("-Dhw:0,0"), songFile };
+
+    m_titleAudioProcess->start(aplay, args);
+    m_titleMusicStarted = m_titleAudioProcess->waitForStarted(800);
+}
+
+void GameNode::stopTitleMusic()
+{
+    m_titleMusicStarted = false;
+    if (m_titleAudioProcess->state() != QProcess::NotRunning) {
+        m_titleAudioProcess->terminate();
+        if (!m_titleAudioProcess->waitForFinished(300)) {
+            m_titleAudioProcess->kill();
+            m_titleAudioProcess->waitForFinished(300);
         }
     }
 }
