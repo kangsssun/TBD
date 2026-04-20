@@ -34,6 +34,8 @@ public:
     void setGlobalProgress(int percent);
 
     void setSendMessageCallback(const std::function<void(const QString &)> &cb);
+    void setProgressUpdateCallback(const std::function<void(int missionNumber, int progress)> &cb);
+    int missionProgress() const { return m_currentProgress; }
 
 private:
     void setupUi();
@@ -61,6 +63,8 @@ private:
     QStringList m_notices;
     QStringList m_directMessages;
     std::function<void(const QString &)> m_sendMessageCb;
+    std::function<void(int, int)> m_progressUpdateCb;
+    int m_currentProgress;
 };
 
 #endif // READYPAGE_H

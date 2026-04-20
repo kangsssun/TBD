@@ -362,6 +362,7 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     // ── Keyboard toggle filter ─────────────────────────────────────────
     auto *filter = new KbToggleFilter(kbScroll, chatInput, &dialog);
     dialog.installEventFilter(filter);
+    chatInput->installEventFilter(filter);
 
     // ── Send message ───────────────────────────────────────────────────
     auto doSend = [&inputRaw, refreshInput, chatList, &teamName, &sendCb]() {

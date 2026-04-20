@@ -80,6 +80,17 @@ GameNode::GameNode(QWidget *parent)
         sendMessage(msg);
     });
 
+    // ── Set up progress-update callback for mission clear ──────────────
+    m_readyPage->setProgressUpdateCallback([this](int missionNumber, int progress) {
+        QJsonObject msg;
+        msg["type"] = "update_progress";
+        msg["team_id"] = m_teamId;
+        msg["mission"] = missionNumber;
+        msg["progress"] = progress;
+        sendMessage(msg);
+        qDebug() << "[SYSTEM] Progress updated: mission=" << missionNumber << "progress=" << progress;
+    });
+
     // ── Connect emergency page confirm → go to ready page ──────────────
     QObject::connect(m_emergencyPage, &EmergencyPage::confirmed, this, [this]() {
         // 타이머는 서버에서 시작할 때까지 대기 (시간만 표시하고 카운트다운은 안 함)

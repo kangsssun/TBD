@@ -52,7 +52,8 @@ OBJECTS_DIR   = ./
 
 ####### Files
 
-SOURCES       = ../game_node/main.cpp \
+SOURCES       = ../game_node/dd_api/led_api.c \
+		../game_node/main.cpp \
 		../game_node/game_node.cpp \
 		../game_node/keyboard/keyboardpanel.cpp \
 		../game_node/title/teamnamedialog.cpp \
@@ -65,7 +66,8 @@ SOURCES       = ../game_node/main.cpp \
 		moc_emergencypage.cpp \
 		moc_readypage.cpp \
 		moc_missionpage.cpp
-OBJECTS       = main.o \
+OBJECTS       = led_api.o \
+		main.o \
 		game_node.o \
 		keyboardpanel.o \
 		teamnamedialog.o \
@@ -146,14 +148,16 @@ DIST          = /home/user/work/buildroot-2024.02.1/output/host/mkspecs/features
 		/home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/exceptions.prf \
 		/home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/yacc.prf \
 		/home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/lex.prf \
-		../game_node/game_node.pro ../game_node/game_node.h \
+		../game_node/game_node.pro ../game_node/dd_api/led_api.h \
+		../game_node/game_node.h \
 		../game_node/keyboard/keyboardpanel.h \
 		../game_node/title/teamnamedialog.h \
 		../game_node/intro/emergencypage.h \
 		../game_node/game/readypage.h \
 		../game_node/game/missionpage.h \
 		../game_node/chat/contactgmdialog.h \
-		../game_node/notice/noticedialog.h ../game_node/main.cpp \
+		../game_node/notice/noticedialog.h ../game_node/dd_api/led_api.c \
+		../game_node/main.cpp \
 		../game_node/game_node.cpp \
 		../game_node/keyboard/keyboardpanel.cpp \
 		../game_node/title/teamnamedialog.cpp \
@@ -328,8 +332,8 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents ../game_node/resources.qrc $(DISTDIR)/
 	$(COPY_FILE) --parents /home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents ../game_node/game_node.h ../game_node/keyboard/keyboardpanel.h ../game_node/title/teamnamedialog.h ../game_node/intro/emergencypage.h ../game_node/game/readypage.h ../game_node/game/missionpage.h ../game_node/chat/contactgmdialog.h ../game_node/notice/noticedialog.h $(DISTDIR)/
-	$(COPY_FILE) --parents ../game_node/main.cpp ../game_node/game_node.cpp ../game_node/keyboard/keyboardpanel.cpp ../game_node/title/teamnamedialog.cpp ../game_node/intro/emergencypage.cpp ../game_node/game/readypage.cpp ../game_node/game/missionpage.cpp ../game_node/chat/contactgmdialog.cpp ../game_node/notice/noticedialog.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents ../game_node/dd_api/led_api.h ../game_node/game_node.h ../game_node/keyboard/keyboardpanel.h ../game_node/title/teamnamedialog.h ../game_node/intro/emergencypage.h ../game_node/game/readypage.h ../game_node/game/missionpage.h ../game_node/chat/contactgmdialog.h ../game_node/notice/noticedialog.h $(DISTDIR)/
+	$(COPY_FILE) --parents ../game_node/dd_api/led_api.c ../game_node/main.cpp ../game_node/game_node.cpp ../game_node/keyboard/keyboardpanel.cpp ../game_node/title/teamnamedialog.cpp ../game_node/intro/emergencypage.cpp ../game_node/game/readypage.cpp ../game_node/game/missionpage.cpp ../game_node/chat/contactgmdialog.cpp ../game_node/notice/noticedialog.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents ../game_node/game_node.ui $(DISTDIR)/
 
 
@@ -359,8 +363,8 @@ compiler_rcc_clean:
 	-$(DEL_FILE) qrc_resources.cpp
 qrc_resources.cpp: ../game_node/resources.qrc \
 		/home/user/work/buildroot-2024.02.1/output/host/bin/rcc \
-		../game_node/images/misson_1.png \
-		../game_node/images/devil.png \
+		../game_node/images/mission1_complete.png \
+		../game_node/images/mission2_complete.png \
 		../game_node/images/title.png \
 		../game_node/fonts/NotoSansKR-Regular.ttf
 	/home/user/work/buildroot-2024.02.1/output/host/bin/rcc -name resources ../game_node/resources.qrc -o qrc_resources.cpp
@@ -415,6 +419,10 @@ compiler_clean: compiler_rcc_clean compiler_moc_predefs_clean compiler_moc_heade
 
 ####### Compile
 
+led_api.o: ../game_node/dd_api/led_api.c ../game_node/dd_api/led_api.h \
+		../game_node/dd_api/led_ioctl.h
+	$(CC) -c $(CFLAGS) $(INCPATH) -o led_api.o ../game_node/dd_api/led_api.c
+
 main.o: ../game_node/main.cpp ../game_node/game_node.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o ../game_node/main.cpp
 
@@ -422,6 +430,7 @@ game_node.o: ../game_node/game_node.cpp ../game_node/game_node.h \
 		ui_game_node.h \
 		../game_node/intro/emergencypage.h \
 		../game_node/game/readypage.h \
+		../game_node/game/missionpage.h \
 		../game_node/title/teamnamedialog.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o game_node.o ../game_node/game_node.cpp
 
@@ -442,7 +451,9 @@ readypage.o: ../game_node/game/readypage.cpp ../game_node/game/readypage.h \
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o readypage.o ../game_node/game/readypage.cpp
 
 missionpage.o: ../game_node/game/missionpage.cpp ../game_node/game/missionpage.h \
-		../game_node/title/teamnamedialog.h
+		../game_node/title/teamnamedialog.h \
+		../game_node/dd_api/led_api.h \
+		../game_node/dd_api/led_ioctl.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o missionpage.o ../game_node/game/missionpage.cpp
 
 contactgmdialog.o: ../game_node/chat/contactgmdialog.cpp ../game_node/chat/contactgmdialog.h

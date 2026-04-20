@@ -29,6 +29,7 @@ ReadyPage::ReadyPage(QWidget *parent)
     , m_globalPercentLabel(nullptr)
     , m_unreadNotices(0)
     , m_unreadMessages(0)
+    , m_currentProgress(0)
 {
     setupUi();
     setMissionWidget(new MissionPage(1, this));
@@ -121,6 +122,11 @@ void ReadyPage::setSendMessageCallback(const std::function<void(const QString &)
     m_sendMessageCb = cb;
 }
 
+void ReadyPage::setProgressUpdateCallback(const std::function<void(int missionNumber, int progress)> &cb)
+{
+    m_progressUpdateCb = cb;
+}
+
 void ReadyPage::setMissionWidget(MissionPage *mission)
 {
     if (!m_eventLayout) return;
@@ -139,6 +145,14 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
 
         // When mission completes, advance to the next mission
         QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {
+            // 진행도 20% 증가
+            m_currentProgress = qMin(100, m_currentProgress + 20);
+            setMissionProgress(m_currentProgress);
+
+            // 서버에 진행도 전송
+            if (m_progressUpdateCb)
+                m_progressUpdateCb(completedNumber + 1, m_currentProgress);
+
             auto *nextMission = new MissionPage(completedNumber + 1, this);
             setMissionWidget(nextMission);
             nextMission->startMission();
