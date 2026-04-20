@@ -435,7 +435,8 @@ void GameNode::applyStyles()
         }
 
         QPushButton#systemNoticesButton,
-        QPushButton#contactGmButton {
+        QPushButton#contactGmButton,
+        QPushButton#helpButton {
             background-color: transparent;
             border-radius: 6px;
             padding: 8px 12px;
@@ -464,6 +465,17 @@ void GameNode::applyStyles()
         QPushButton#contactGmButton:hover {
             background-color: #1a3150;
             color: #bfdbfe;
+        }
+
+        QPushButton#helpButton {
+            color: #34d399;
+            background-color: #0f2d27;
+            border: 1px solid #10b981;
+        }
+
+        QPushButton#helpButton:hover {
+            background-color: #134236;
+            color: #a7f3d0;
         }
 
         QWidget#thinDivider {

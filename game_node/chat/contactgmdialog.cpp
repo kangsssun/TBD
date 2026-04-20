@@ -11,9 +11,11 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QGuiApplication>
+#include <QApplication>
 #include <QScreen>
 #include <QTimer>
 #include <QMouseEvent>
+#include <QDateTime>
 #include <functional>
 
 // ── Hangul compose helpers ─────────────────────────────────────────────────
@@ -133,7 +135,7 @@ QString koreanShiftChar(const QString &b)
     return b;
 }
 
-void connectDebounced(QPushButton *btn, const std::function<void()> &handler, int ms = 120)
+void connectDebounced(QPushButton *btn, const std::function<void()> &handler, int ms = 80)
 {
     QObject::connect(btn, &QPushButton::released, btn, [btn, handler, ms]() {
         if (!btn->isEnabled()) return;
@@ -146,18 +148,36 @@ void connectDebounced(QPushButton *btn, const std::function<void()> &handler, in
 // Event filter to show/hide keyboard on touch
 class KbToggleFilter : public QObject {
 public:
-    QWidget *kb; QLineEdit *input;
-    KbToggleFilter(QWidget *k, QLineEdit *i, QObject *p) : QObject(p), kb(k), input(i) {}
-    bool eventFilter(QObject *, QEvent *ev) override {
-        if (ev->type() == QEvent::MouseButtonPress) {
-            auto *me = static_cast<QMouseEvent*>(ev);
-            QPoint ip = input->mapFromGlobal(me->globalPos());
-            if (input->rect().contains(ip)) { kb->setVisible(true); return false; }
-            QPoint kp = kb->mapFromGlobal(me->globalPos());
-            if (kb->isVisible() && kb->rect().contains(kp)) { return false; }
-            kb->setVisible(false);
+    QWidget *kb;
+    QLineEdit *input;
+    QWidget *root;
+
+    KbToggleFilter(QWidget *k, QLineEdit *i, QWidget *r, QObject *p)
+        : QObject(p), kb(k), input(i), root(r) {}
+
+    bool eventFilter(QObject *watched, QEvent *ev) override {
+        if (!kb || !input || !root || ev->type() != QEvent::MouseButtonPress) {
+            return QObject::eventFilter(watched, ev);
         }
-        return false;
+
+        auto *me = static_cast<QMouseEvent *>(ev);
+
+        // 입력창 클릭 → 키패드 토글
+        const QRect inputRect(input->mapToGlobal(QPoint(0, 0)), input->size());
+        if (inputRect.contains(me->globalPos())) {
+            kb->setVisible(!kb->isVisible());
+            return false;
+        }
+
+        // 팝업(dialog) 외부 클릭 → 키패드 닫기
+        if (kb->isVisible()) {
+            const QRect rootRect(root->mapToGlobal(QPoint(0, 0)), root->size());
+            if (!rootRect.contains(me->globalPos())) {
+                kb->setVisible(false);
+            }
+        }
+
+        return QObject::eventFilter(watched, ev);
     }
 };
 
@@ -167,80 +187,212 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
                            const QStringList &messages,
                            const std::function<void(const QString &)> &sendCb)
 {
+    // ════════════════════════════════════════════════════════════════════
+    // Dialog setup — 760 × 520, dark slate + cyan accent
+    // ════════════════════════════════════════════════════════════════════
     QDialog dialog(parent);
     dialog.setObjectName(QStringLiteral("contactGmDialog"));
     dialog.setWindowTitle(QStringLiteral("CONTACT GM"));
     dialog.setModal(true);
     dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dialog.setAttribute(Qt::WA_StyledBackground, true);
-
-    QScreen *scr = parent ? parent->screen() : QGuiApplication::primaryScreen();
-    QRect avail = scr ? scr->availableGeometry() : QRect(0,0,760,600);
-    int dw = qMin(760, avail.width() - 20);
-    int dh = qMin(600, avail.height() - 20);
-    dialog.setFixedSize(dw, dh);
-    qreal sc = qMin(1.0, qMin(dw/760.0, dh/600.0));
-    auto sz = [sc](int v, int m) { return qMax(m, qRound(v * sc)); };
+    dialog.setFixedSize(760, 520);
 
     dialog.setStyleSheet(QStringLiteral(R"(
-        QDialog#contactGmDialog { background-color: #0b1220; border: 1px solid #10b981; border-radius: 12px; }
-        QLabel#contactTitle { background:transparent; color:#fff; font-size:22px; font-weight:800; }
-        QListWidget#chatList { background-color:#111827; color:#e5e7eb; border:1px solid #1f2937; border-radius:8px; padding:6px; font-size:14px; }
-        QLineEdit#chatInput { background-color:#111827; color:#fff; border:1px solid #334155; border-radius:8px; padding:6px 8px; font-size:14px; }
-        QPushButton#chatSendButton { background-color:#14532d; color:#fff; border:1px solid #10b981; border-radius:8px; padding:6px 12px; font-size:14px; font-weight:700; }
-        QPushButton#chatSendButton:hover { background-color:#166534; }
-        QPushButton#chatCloseButton { background-color:#142338; color:#bfdbfe; border:1px solid #2563eb; border-radius:8px; padding:8px 18px; font-size:14px; font-weight:700; }
-        QPushButton#chatCloseButton:hover { background-color:#1a3150; color:#fff; }
-        QPushButton#kbKey { background-color:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:4px; font-size:13px; font-weight:600; }
-        QPushButton#kbKey:pressed { background-color:#2563eb; }
-        QPushButton#kbSpecial { background-color:#0f172a; color:#94a3b8; border:1px solid #334155; border-radius:4px; font-size:11px; font-weight:700; }
-        QPushButton#kbSpecial:pressed { background-color:#334155; }
-        QScrollArea#kbScroll { background:transparent; border:none; }
+        QDialog#contactGmDialog {
+            background-color: #0f172a;
+            border: 2px solid #06b6d4;
+            border-radius: 12px;
+        }
+        QListWidget#chatList {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+        QLineEdit#chatInput {
+            background-color: #1e293b;
+            color: #fff;
+            border: 1px solid #06b6d4;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 15px;
+        }
+        QPushButton#chatSendButton {
+            background-color: #0a1628;
+            color: #00ffff;
+            border: 1px solid #00cccc;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Courier New', monospace;
+            padding: 2px 8px;
+        }
+        QPushButton#chatSendButton:hover { background-color: rgba(0, 255, 255, 40); color: #fff; }
+        QPushButton#chatCloseButton {
+            background-color: #0a1628;
+            color: #ff00ff;
+            border: 1px solid #cc00cc;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Courier New', monospace;
+            padding: 2px 8px;
+        }
+        QPushButton#chatCloseButton:hover { background-color: rgba(255, 0, 255, 40); color: #fff; }
+        QPushButton#kbKey {
+            background-color: #1a1a2e;
+            color: #00ffff;
+            border: 1px solid #00cccc;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            font-family: 'Consolas', 'Courier New', monospace;
+            padding: 2px;
+            outline: none;
+        }
+        QPushButton#kbKey:hover { background-color: rgba(0, 255, 255, 40); color: #ffffff; }
+        QPushButton#kbKey:pressed { background-color: rgba(0, 255, 255, 120); color: #0a0a0f; border-color: #00ffff; }
+        QPushButton#kbSpecial {
+            background-color: #1a1a2e;
+            color: #ff00ff;
+            border: 1px solid #cc00cc;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            font-family: 'Consolas', 'Courier New', monospace;
+            padding: 1px;
+            outline: none;
+        }
+        QPushButton#kbSpecial:hover { background-color: rgba(255, 0, 255, 40); color: #ffffff; }
+        QPushButton#kbSpecial:pressed { background-color: rgba(255, 0, 255, 120); color: #0a0a0f; border-color: #ff00ff; }
     )"));
 
+    // ════════════════════════════════════════════════════════════════════
+    // Pixel budget (520 total height):
+    //   margins top 10 + bottom 8 = 18  → usable 502
+    //   spacing 6 × 3 gaps = 18         → content 484
+    //   chatList  = 180  (fixed)
+    //   inputRow  = 32   (fixed)
+    //   keyboard  = 272  (remaining, generous)
+    // ════════════════════════════════════════════════════════════════════
+
     auto *mainLayout = new QVBoxLayout(&dialog);
-    mainLayout->setContentsMargins(16, 14, 16, 12);
-    mainLayout->setSpacing(8);
+    mainLayout->setContentsMargins(12, 10, 12, 8);
+    mainLayout->setSpacing(6);
 
-    auto *titleLabel = new QLabel(QStringLiteral("CONTACT GM"), &dialog);
-    titleLabel->setObjectName(QStringLiteral("contactTitle"));
-    titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel);
-
-    // ── Chat list ──────────────────────────────────────────────────────
+    // ── Chat list (fixed height, scrollable) ───────────────────────────
     auto *chatList = new QListWidget(&dialog);
     chatList->setObjectName(QStringLiteral("chatList"));
-    chatList->addItem(QStringLiteral("[SYSTEM] CONTACT GM 채널이 연결되었습니다."));
-    for (const auto &msg : messages)
-        chatList->addItem(QStringLiteral("[GM] %1").arg(msg));
-    if (messages.isEmpty())
-        chatList->addItem(QStringLiteral("[GM] 문의사항을 입력해 주세요."));
-    mainLayout->addWidget(chatList, 1);
+    chatList->setFixedHeight(180);
+    chatList->viewport()->setStyleSheet(QStringLiteral("background-color:#1e293b;"));
 
-    // ── Input row ──────────────────────────────────────────────────────
+    auto addChatEntry = [chatList](const QString &sender,
+                                   const QString &text,
+                                   Qt::Alignment bubbleAlign,
+                                   const QString &bubbleStyle,
+                                   const QString &timeText,
+                                   bool showSender,
+                                   bool centerOnly = false) {
+        auto *item = new QListWidgetItem(chatList);
+        auto *wrapper = new QWidget(chatList);
+        wrapper->setStyleSheet(QStringLiteral("background:transparent;"));
+        auto *outerLayout = new QHBoxLayout(wrapper);
+        outerLayout->setContentsMargins(4, 3, 4, 3);
+        outerLayout->setSpacing(0);
+
+        if (centerOnly) {
+            auto *lbl = new QLabel(text, wrapper);
+            lbl->setWordWrap(true);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setStyleSheet(QStringLiteral(
+                "color:#67e8f9; font-size:12px; background:transparent; border:none; padding:2px 6px;"));
+            outerLayout->addWidget(lbl, 1);
+        } else {
+            auto *area = new QWidget(wrapper);
+            area->setStyleSheet(QStringLiteral("background:transparent;"));
+            auto *aLayout = new QVBoxLayout(area);
+            aLayout->setContentsMargins(0, 0, 0, 0);
+            aLayout->setSpacing(0);
+
+            auto *bubble = new QLabel(text, area);
+            bubble->setWordWrap(true);
+            bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            bubble->setMaximumWidth(420);
+            bubble->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            bubble->setStyleSheet(bubbleStyle);
+            aLayout->addWidget(bubble, 0, bubbleAlign);
+
+            if (bubbleAlign == Qt::AlignRight) {
+                outerLayout->addStretch();
+                outerLayout->addWidget(area, 0, Qt::AlignRight);
+            } else {
+                outerLayout->addWidget(area, 0, Qt::AlignLeft);
+                outerLayout->addStretch();
+            }
+        }
+
+        item->setSizeHint(wrapper->sizeHint());
+        chatList->addItem(item);
+        chatList->setItemWidget(item, wrapper);
+        chatList->scrollToBottom();
+    };
+
+    // Seed initial messages
+    addChatEntry(QString(), QString::fromUtf8("GM \xec\xb1\x84\xeb\x84\x90\xec\x9d\xb4 \xec\x97\xb0\xea\xb2\xb0\xeb\x90\x98\xec\x97\x88\xec\x8a\xb5\xeb\x8b\x88\xeb\x8b\xa4."),
+                 Qt::AlignCenter, QString(), QString(), false, true);
+
+    const QString gmBubble = QStringLiteral(
+        "background-color:#164e63; color:#ecfeff; border:1px solid #0e7490; "
+        "border-radius:10px; padding:6px 10px; font-size:14px;");
+    for (const auto &msg : messages) {
+        addChatEntry(QStringLiteral("GM"), msg, Qt::AlignLeft, gmBubble,
+                     QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+    }
+    if (messages.isEmpty()) {
+        addChatEntry(QStringLiteral("GM"), QString::fromUtf8("\xeb\xac\xb8\xec\x9d\x98\xec\x82\xac\xed\x95\xad\xec\x9d\x84 \xec\x9e\x85\xeb\xa0\xa5\xed\x95\xb4 \xec\xa3\xbc\xec\x84\xb8\xec\x9a\x94."),
+                     Qt::AlignLeft, gmBubble,
+                     QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+    }
+    mainLayout->addWidget(chatList);
+
+    // ── Input row (fixed height) ───────────────────────────────────────
     QString inputRaw;
 
     auto *chatInput = new QLineEdit(&dialog);
     chatInput->setObjectName(QStringLiteral("chatInput"));
-    chatInput->setPlaceholderText(QStringLiteral("질문 또는 요청사항을 입력하세요."));
+    chatInput->setPlaceholderText(QString::fromUtf8("\xeb\xa9\x94\xec\x8b\x9c\xec\xa7\x80\xeb\xa5\xbc \xec\x9e\x85\xeb\xa0\xa5\xed\x95\x98\xec\x84\xb8\xec\x9a\x94..."));
     chatInput->setReadOnly(true);
+    chatInput->setFixedHeight(32);
 
     auto refreshInput = [&inputRaw, chatInput]() {
         chatInput->setText(composeHangul(inputRaw));
+        chatInput->setCursorPosition(chatInput->text().size());
     };
 
-    auto *sendButton = new QPushButton(QStringLiteral("전송"), &dialog);
+    auto *sendButton = new QPushButton(QString::fromUtf8("\xec\xa0\x84\xec\x86\xa1"), &dialog);
     sendButton->setObjectName(QStringLiteral("chatSendButton"));
     sendButton->setCursor(Qt::PointingHandCursor);
-    sendButton->setMinimumWidth(72);
+    sendButton->setFixedSize(72, 36);
+
+    auto *closeButton = new QPushButton(QString::fromUtf8("\xeb\x8b\xab\xea\xb8\xb0"), &dialog);
+    closeButton->setObjectName(QStringLiteral("chatCloseButton"));
+    closeButton->setCursor(Qt::PointingHandCursor);
+    closeButton->setFixedSize(72, 36);
+    QObject::connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
 
     auto *inputRow = new QHBoxLayout();
-    inputRow->setSpacing(8);
+    inputRow->setContentsMargins(0, 0, 0, 0);
+    inputRow->setSpacing(6);
     inputRow->addWidget(chatInput, 1);
     inputRow->addWidget(sendButton);
+    inputRow->addWidget(closeButton);
     mainLayout->addLayout(inputRow);
 
-    // ── On-screen keyboard ─────────────────────────────────────────────
+    // ── On-screen keyboard (stretch 1 — takes ALL remaining space) ─────
     const QStringList engRows = {
         QStringLiteral("1234567890"),
         QStringLiteral("QWERTYUIOP"),
@@ -259,22 +411,30 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     bool upperCase = true;
     QList<QPushButton *> engKeys, korKeys;
 
-    auto *kbContainer = new QWidget(&dialog);
-    auto *kbLayout = new QVBoxLayout(kbContainer);
-    kbLayout->setContentsMargins(0, 0, 0, 0);
-    kbLayout->setSpacing(sz(2, 1));
+    auto *kbArea = new QWidget(&dialog);
+    kbArea->setStyleSheet(QStringLiteral("background-color:#0f172a;"));
+    auto *kbOuterLayout = new QVBoxLayout(kbArea);
+    kbOuterLayout->setContentsMargins(0, 2, 0, 0);
+    kbOuterLayout->setSpacing(2);
 
-    auto *kbPages = new QStackedWidget(kbContainer);
+    auto *kbPages = new QStackedWidget(kbArea);
+    kbPages->setStyleSheet(QStringLiteral("background:transparent;"));
 
     auto buildPage = [&](const QStringList &rows, bool isEng) -> QWidget* {
         auto *pg = new QWidget();
-        auto *pl = new QVBoxLayout(pg); pl->setContentsMargins(0,0,0,0); pl->setSpacing(sz(2,1));
+        pg->setStyleSheet(QStringLiteral("background:transparent;"));
+        auto *pl = new QVBoxLayout(pg);
+        pl->setContentsMargins(0, 0, 0, 0);
+        pl->setSpacing(0);
         for (const QString &row : rows) {
-            auto *rl = new QHBoxLayout(); rl->setContentsMargins(0,0,0,0); rl->setSpacing(sz(2,1)); rl->addStretch();
+            auto *rl = new QHBoxLayout();
+            rl->setContentsMargins(0, 0, 0, 0);
+            rl->setSpacing(0);
+            rl->addStretch();
             for (const QChar &ch : row) {
                 auto *k = new QPushButton(QString(ch));
                 k->setObjectName(QStringLiteral("kbKey"));
-                k->setFixedSize(sz(40, 20), sz(30, 16));
+                k->setFixedSize(46, 34);
                 k->setCursor(Qt::PointingHandCursor);
                 k->setFocusPolicy(Qt::NoFocus);
                 if (isEng && ch.isLetter()) {
@@ -293,7 +453,8 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
                 });
                 rl->addWidget(k);
             }
-            rl->addStretch(); pl->addLayout(rl);
+            rl->addStretch();
+            pl->addLayout(rl);
         }
         return pg;
     };
@@ -301,26 +462,30 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     kbPages->addWidget(buildPage(engRows, true));
     kbPages->addWidget(buildPage(korRows, false));
     kbPages->setCurrentIndex(1);
-    kbLayout->addWidget(kbPages);
+    kbOuterLayout->addWidget(kbPages, 1);
 
     // Special buttons row
-    auto *spBar = new QWidget(kbContainer);
-    auto *spLay = new QHBoxLayout(spBar); spLay->setContentsMargins(0,0,0,0); spLay->setSpacing(sz(2,1)); spLay->addStretch();
+    auto *spBar = new QWidget(kbArea);
+    spBar->setStyleSheet(QStringLiteral("background:transparent;"));
+    auto *spLay = new QHBoxLayout(spBar);
+    spLay->setContentsMargins(0, 0, 0, 0);
+    spLay->setSpacing(0);
+    spLay->addStretch();
 
-    auto makeSpecial = [&](const QString &label, int w) {
+    auto makeSpecial = [](const QString &label, int w) {
         auto *b = new QPushButton(label);
         b->setObjectName(QStringLiteral("kbSpecial"));
-        b->setFixedSize(sz(w, 40), sz(28, 16));
+        b->setFixedSize(w, 32);
         b->setCursor(Qt::PointingHandCursor);
         b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
 
-    auto *btnClear = makeSpecial(QStringLiteral("CLR"), 56);
-    auto *btnShift = makeSpecial(QStringLiteral("Shift"), 64);
-    auto *btnSpace = makeSpecial(QStringLiteral("SPACE"), 100);
-    auto *btnLang  = makeSpecial(QStringLiteral("A/H"), 56);
-    auto *btnDel   = makeSpecial(QStringLiteral("DEL"), 56);
+    auto *btnClear = makeSpecial(QStringLiteral("CLEAR"), 80);
+    auto *btnShift = makeSpecial(QStringLiteral("Shift"), 80);
+    auto *btnSpace = makeSpecial(QStringLiteral("SPACE"), 136);
+    auto *btnLang  = makeSpecial(QString::fromUtf8("\xed\x95\x9c/\xec\x98\x81"), 80);
+    auto *btnDel   = makeSpecial(QStringLiteral("<< DEL"), 80);
 
     connectDebounced(btnClear, [&inputRaw, refreshInput]() { inputRaw.clear(); refreshInput(); });
     connectDebounced(btnDel,   [&inputRaw, refreshInput]() { if (!inputRaw.isEmpty()) { inputRaw.chop(1); refreshInput(); } });
@@ -340,58 +505,53 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     connectDebounced(btnLang, [&koreanMode, &shiftOn, kbPages, &korKeys, btnLang, btnShift]() {
         koreanMode = !koreanMode;
         kbPages->setCurrentIndex(koreanMode ? 1 : 0);
-        btnLang->setText(koreanMode ? QStringLiteral("A/H") : QStringLiteral("H/A"));
-        if (koreanMode) { shiftOn = false; for (auto *k : korKeys) k->setText(k->property("base").toString()); btnShift->setText(QStringLiteral("Shift")); }
+        btnLang->setText(koreanMode ? QString::fromUtf8("\xed\x95\x9c/\xec\x98\x81") : QString::fromUtf8("\xec\x98\x81/\xed\x95\x9c"));
+        if (koreanMode) {
+            shiftOn = false;
+            for (auto *k : korKeys) k->setText(k->property("base").toString());
+            btnShift->setText(QStringLiteral("Shift"));
+        }
     });
 
-    spLay->addWidget(btnClear); spLay->addWidget(btnShift); spLay->addWidget(btnSpace);
-    spLay->addWidget(btnLang); spLay->addWidget(btnDel); spLay->addStretch();
-    kbLayout->addWidget(spBar);
+    spLay->addWidget(btnClear);
+    spLay->addWidget(btnShift);
+    spLay->addWidget(btnSpace);
+    spLay->addWidget(btnLang);
+    spLay->addWidget(btnDel);
+    spLay->addStretch();
+    kbOuterLayout->addWidget(spBar);
 
-    auto *kbScroll = new QScrollArea(&dialog);
-    kbScroll->setObjectName(QStringLiteral("kbScroll"));
-    kbScroll->setFrameShape(QFrame::NoFrame);
-    kbScroll->setWidgetResizable(true);
-    kbScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    kbScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    kbScroll->setWidget(kbContainer);
-    kbScroll->setVisible(false); // Initially hidden
+    // Keyboard area takes ALL remaining vertical space (stretch 1)
+    kbArea->setVisible(false);
+    mainLayout->addWidget(kbArea, 1);
 
-    mainLayout->addWidget(kbScroll);
-
-    // ── Keyboard toggle filter ─────────────────────────────────────────
-    auto *filter = new KbToggleFilter(kbScroll, chatInput, &dialog);
-    dialog.installEventFilter(filter);
-    chatInput->installEventFilter(filter);
+    auto *kbToggleFilter = new KbToggleFilter(kbArea, chatInput, &dialog, &dialog);
+    qApp->installEventFilter(kbToggleFilter);
 
     // ── Send message ───────────────────────────────────────────────────
-    auto doSend = [&inputRaw, refreshInput, chatList, &teamName, &sendCb]() {
+    auto doSend = [&inputRaw, refreshInput, chatList, &teamName, &sendCb, addChatEntry]() {
         const QString composed = composeHangul(inputRaw).trimmed();
         if (composed.isEmpty()) return;
 
         const QString sender = teamName.isEmpty() ? QStringLiteral("TEAM 1") : teamName;
-        chatList->addItem(QStringLiteral("[%1] %2").arg(sender.toUpper(), composed));
-        chatList->scrollToBottom();
+        addChatEntry(sender.toUpper(), composed, Qt::AlignRight,
+                     QStringLiteral("background-color:#14532d; color:#fff; border:1px solid #10b981; "
+                                    "border-radius:10px; padding:6px 10px; font-size:14px;"),
+                     QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
 
         if (sendCb) sendCb(composed);
-
         inputRaw.clear();
         refreshInput();
     };
 
     QObject::connect(sendButton, &QPushButton::clicked, &dialog, doSend);
 
-    // ── Close button ───────────────────────────────────────────────────
-    auto *closeButton = new QPushButton(QStringLiteral("닫기"), &dialog);
-    closeButton->setObjectName(QStringLiteral("chatCloseButton"));
-    closeButton->setCursor(Qt::PointingHandCursor);
-    closeButton->setFixedHeight(38);
-    QObject::connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
-    mainLayout->addWidget(closeButton, 0, Qt::AlignRight);
-
+    // ── Position & show ────────────────────────────────────────────────
     if (parent) {
         const QPoint c = parent->mapToGlobal(parent->rect().center());
-        dialog.move(c - QPoint(dialog.width()/2, dialog.height()/2));
+        dialog.move(c - QPoint(dialog.width() / 2, dialog.height() / 2));
     }
+
     dialog.exec();
+    qApp->removeEventFilter(kbToggleFilter);
 }
