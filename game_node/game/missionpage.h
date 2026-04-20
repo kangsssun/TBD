@@ -3,6 +3,8 @@
 
 #include <QWidget>
 
+class QObject;
+class QEvent;
 class QVBoxLayout;
 class QLabel;
 class QPushButton;
@@ -37,6 +39,7 @@ signals:
 
 protected:
     virtual void setupMission();
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     QVBoxLayout *contentLayout() const { return m_contentLayout; }
@@ -63,6 +66,7 @@ private:
     void startMission3CameraPreview();
     void stopMission3CameraPreview();
     void evaluateMission3CameraPreview();
+    void refreshMission3PreviewPlaceholder();
     bool hasBlockingPopupOpen() const;
     QString buildMission3CapturePath() const;
     void syncOperatorModeUi();

@@ -277,19 +277,18 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         if (m_readyPage) {
             m_readyPage->setTeamName(m_teamName);
             m_readyPage->restoreProgress(progress);
-            // 해당 미션 페이지로 복원
+
             auto *restoredMission = new MissionPage(mission, m_readyPage);
             m_readyPage->setMissionWidget(restoredMission);
             restoredMission->startMission();
         }
 
-        // 게임 화면으로 바로 이동
         if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
         }
     }
     else if (type == "force_reset") {
-        // GM이 이 팀을 리셋 → 타이틀 화면으로 되돌리기
+        // GM 강제 리셋 수신 시 타이틀 화면으로 복귀
         qDebug() << "[SYSTEM] Force reset received from GM";
         m_teamName.clear();
         m_teamId = 1;
@@ -297,7 +296,6 @@ void GameNode::handleServerMessage(const QJsonObject &json)
             m_readyPage->setMissionProgress(0);
             m_readyPage->setGlobalProgress(0);
         }
-        // 타이틀 화면으로 이동
         ui->stackedWidget->setCurrentIndex(0);
         playTitleMusicIfNeeded();
     }
@@ -474,7 +472,8 @@ void GameNode::applyStyles()
         }
 
         QPushButton#systemNoticesButton,
-        QPushButton#contactGmButton {
+        QPushButton#contactGmButton,
+        QPushButton#helpButton {
             background-color: transparent;
             border-radius: 6px;
             padding: 8px 12px;
@@ -503,6 +502,17 @@ void GameNode::applyStyles()
         QPushButton#contactGmButton:hover {
             background-color: #1a3150;
             color: #bfdbfe;
+        }
+
+        QPushButton#helpButton {
+            color: #34d399;
+            background-color: #0f2d27;
+            border: 1px solid #10b981;
+        }
+
+        QPushButton#helpButton:hover {
+            background-color: #134236;
+            color: #a7f3d0;
         }
 
         QWidget#thinDivider {

@@ -15,6 +15,8 @@
 #include <QThread>
 #include <QEvent>
 #include <QGridLayout>
+#include <QProgressBar>
+#include <QRandomGenerator>
 #include <QStyle>
 #include <QDateTime>
 #include <QDir>
@@ -22,6 +24,11 @@
 #include <QMetaObject>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QVector>
+#include <QtMath>
+#include <cmath>
 
 #ifdef Q_OS_LINUX
 #include "dd_api/led_api.h"
@@ -47,6 +54,210 @@ void resetButtonHoverState(QPushButton *button)
 
     button->update();
 }
+
+class TemperatureGraphWidget : public QWidget
+{
+public:
+    explicit TemperatureGraphWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+        , m_targetTemp(25.2)
+        , m_minTemp(0.0)
+        , m_maxTemp(50.0)
+        , m_timeWindowSec(30.0)
+        , m_showTargetLine(true)
+    {
+        setMinimumHeight(140);
+    }
+
+    void setRanges(double minTemp, double maxTemp, double timeWindowSec)
+    {
+        m_minTemp = minTemp;
+        m_maxTemp = maxTemp;
+        m_timeWindowSec = qMax(5.0, timeWindowSec);
+        update();
+    }
+
+    void setTargetTemperature(double targetTemp)
+    {
+        m_targetTemp = targetTemp;
+        update();
+    }
+
+    void setShowTargetLine(bool show)
+    {
+        m_showTargetLine = show;
+        update();
+    }
+
+    void appendSample(double elapsedSec, double temp)
+    {
+        m_points.append(QPointF(elapsedSec, temp));
+
+        const double startTime = qMax(0.0, elapsedSec - m_timeWindowSec);
+        while (!m_points.isEmpty() && m_points.first().x() < startTime) {
+            m_points.removeFirst();
+        }
+
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillRect(rect(), QColor("#05070b"));
+
+        const QRectF plotRect = rect().adjusted(52, 14, -14, -36);
+        if (plotRect.width() < 40.0 || plotRect.height() < 40.0) {
+            return;
+        }
+
+        painter.setPen(QPen(QColor("#1f3a25"), 1));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(plotRect, 6, 6);
+
+        const double now = m_points.isEmpty() ? 0.0 : m_points.last().x();
+        const double xStart = qMax(0.0, now - m_timeWindowSec);
+        const double xEnd = qMax(m_timeWindowSec, now);
+
+        auto toX = [&](double sec) {
+            const double ratio = (sec - xStart) / qMax(0.001, xEnd - xStart);
+            return plotRect.left() + ratio * plotRect.width();
+        };
+        auto toY = [&](double temp) {
+            const double ratio = (temp - m_minTemp) / qMax(0.001, m_maxTemp - m_minTemp);
+            return plotRect.bottom() - ratio * plotRect.height();
+        };
+
+        painter.setPen(QPen(QColor("#112417"), 1));
+        for (int i = 0; i <= 5; ++i) {
+            const double ratio = static_cast<double>(i) / 5.0;
+            const double y = plotRect.top() + ratio * plotRect.height();
+            painter.drawLine(QPointF(plotRect.left(), y), QPointF(plotRect.right(), y));
+
+            const double tempLabel = m_maxTemp - ratio * (m_maxTemp - m_minTemp);
+            painter.setPen(QColor("#40664a"));
+            painter.drawText(QRectF(0, y - 8, 46, 16), Qt::AlignRight | Qt::AlignVCenter,
+                             QString::number(tempLabel, 'f', 0));
+            painter.setPen(QPen(QColor("#112417"), 1));
+        }
+
+        if (m_showTargetLine && m_targetTemp >= m_minTemp && m_targetTemp <= m_maxTemp) {
+            const double yTarget = toY(m_targetTemp);
+            painter.setPen(QPen(QColor("#ff5555"), 1, Qt::DashLine));
+            painter.drawLine(QPointF(plotRect.left(), yTarget), QPointF(plotRect.right(), yTarget));
+            painter.setPen(QColor("#ff7b7b"));
+            painter.drawText(QRectF(plotRect.left() + 8, yTarget - 18, 180, 16), Qt::AlignLeft | Qt::AlignVCenter,
+                             QStringLiteral("정답 %1°C").arg(m_targetTemp, 0, 'f', 1));
+        }
+
+        painter.setPen(QColor("#40664a"));
+        const int xTickStart = static_cast<int>(std::ceil(xStart / 5.0) * 5.0);
+        for (int tick = xTickStart; tick <= static_cast<int>(std::floor(xEnd)); tick += 5) {
+            const double x = toX(static_cast<double>(tick));
+            painter.drawLine(QPointF(x, plotRect.bottom()), QPointF(x, plotRect.bottom() + 4));
+            painter.drawText(QRectF(x - 20, plotRect.bottom() + 6, 40, 16), Qt::AlignCenter,
+                             QString::number(tick));
+        }
+
+        if (m_points.size() >= 2) {
+            QPolygonF polyline;
+            polyline.reserve(m_points.size());
+            for (const QPointF &point : std::as_const(m_points)) {
+                polyline.append(QPointF(toX(point.x()), toY(point.y())));
+            }
+            painter.setPen(QPen(QColor("#00d4ff"), 2));
+            painter.drawPolyline(polyline);
+        }
+
+        if (!m_points.isEmpty()) {
+            const QPointF last = m_points.last();
+            const QPointF mapped(toX(last.x()), toY(last.y()));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor("#00ff88"));
+            painter.drawEllipse(mapped, 4.0, 4.0);
+        }
+
+        painter.setPen(QColor("#6fa87f"));
+        painter.drawText(QRectF(plotRect.left(), rect().height() - 20, plotRect.width(), 16), Qt::AlignCenter,
+                         QStringLiteral("시간 (초)"));
+    }
+
+private:
+    QVector<QPointF> m_points;
+    double m_targetTemp;
+    double m_minTemp;
+    double m_maxTemp;
+    double m_timeWindowSec;
+    bool m_showTargetLine;
+};
+
+class FanWidget : public QWidget
+{
+public:
+    explicit FanWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+        , m_angle(0.0)
+        , m_speedRatio(0.3)
+    {
+        setFixedSize(92, 92);
+    }
+
+    void setSpeedRatio(double ratio)
+    {
+        m_speedRatio = qBound(0.0, ratio, 1.0);
+    }
+
+    void advance()
+    {
+        const double baseStep = 2.2;
+        const double dynamicStep = 10.0 * m_speedRatio;
+        m_angle = std::fmod(m_angle + baseStep + dynamicStep, 360.0);
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillRect(rect(), QColor("#05070b"));
+
+        const qreal side = qMin(width(), height());
+        const QPointF center(width() / 2.0, height() / 2.0);
+        const qreal radius = side * 0.44;
+
+        painter.setPen(QPen(QColor("#1e4a29"), 2));
+        painter.setBrush(QColor("#0b1110"));
+        painter.drawEllipse(center, radius, radius);
+
+        painter.save();
+        painter.translate(center);
+        painter.rotate(m_angle);
+        for (int i = 0; i < 4; ++i) {
+            painter.rotate(90.0);
+            QPainterPath blade;
+            blade.moveTo(radius * 0.08, 0);
+            blade.quadTo(radius * 0.62, -radius * 0.30, radius * 0.80, 0);
+            blade.quadTo(radius * 0.62, radius * 0.30, radius * 0.08, 0);
+            painter.fillPath(blade, QColor("#00c4ff"));
+        }
+        painter.restore();
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor("#00ff88"));
+        painter.drawEllipse(center, radius * 0.18, radius * 0.18);
+    }
+
+private:
+    double m_angle;
+    double m_speedRatio;
+};
 }
 
 bool MissionPage::s_operatorMode = false;
@@ -101,6 +312,7 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
     m_contentLayout = rootLayout;
 
     if (m_missionNumber == 3) {
+        qApp->installEventFilter(this);
         m_mission3PopupWatchTimer = new QTimer(this);
         m_mission3PopupWatchTimer->setInterval(150);
         QObject::connect(m_mission3PopupWatchTimer, &QTimer::timeout, this, [this]() {
@@ -113,7 +325,43 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
 
 MissionPage::~MissionPage()
 {
+    if (m_missionNumber == 3) {
+        qApp->removeEventFilter(this);
+    }
     stopMission3CameraPreview();
+}
+
+bool MissionPage::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_missionNumber == 3 && isVisible() && watched && event) {
+        QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (widget && widget != this && widget != window() && widget->isWindow()) {
+            const bool isBlockingDialog = qobject_cast<QDialog *>(widget)
+                || widget->windowModality() != Qt::NonModal;
+
+            if (isBlockingDialog) {
+                const QEvent::Type type = event->type();
+
+                if (type == QEvent::Show || type == QEvent::ShowToParent || type == QEvent::WindowActivate) {
+                    if (m_mission3CameraActive) {
+                        if (m_mission3CaptureInProgress) {
+                            m_mission3PendingStop = true;
+                        } else {
+                            stopMission3CameraPreview();
+                        }
+                    }
+                }
+
+                if (type == QEvent::Hide || type == QEvent::Close || type == QEvent::WindowDeactivate) {
+                    QTimer::singleShot(0, this, [this]() {
+                        evaluateMission3CameraPreview();
+                    });
+                }
+            }
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
 }
 
 void MissionPage::showEvent(QShowEvent *event)
@@ -227,17 +475,63 @@ void MissionPage::stopMission3CameraPreview()
     m_mission3CameraActive = false;
     m_mission3CameraStarting = false;
     camera_close();
+    refreshMission3PreviewPlaceholder();
 #endif
+}
+
+void MissionPage::refreshMission3PreviewPlaceholder()
+{
+    if (m_missionNumber != 3 || !m_mission3PreviewArea) {
+        return;
+    }
+
+    if (auto *previewLabel = qobject_cast<QLabel *>(m_mission3PreviewArea)) {
+        previewLabel->clear();
+        previewLabel->setText(QStringLiteral("[ LIVE CAMERA ]"));
+    }
+
+    m_mission3PreviewArea->update();
+    m_mission3PreviewArea->repaint();
+
+    if (QWidget *root = window()) {
+        const QPoint topLeft = m_mission3PreviewArea->mapTo(root, QPoint(0, 0));
+        root->update(QRect(topLeft, m_mission3PreviewArea->size()).adjusted(-2, -2, 2, 2));
+        root->repaint(QRect(topLeft, m_mission3PreviewArea->size()).adjusted(-2, -2, 2, 2));
+    }
 }
 
 bool MissionPage::hasBlockingPopupOpen() const
 {
-    QWidget *modal = QApplication::activeModalWidget();
-    if (!modal) {
-        return false;
+    if (QWidget *modal = QApplication::activeModalWidget()) {
+        if (modal->isVisible()) {
+            return true;
+        }
     }
 
-    return modal->isVisible();
+    if (QWidget *popup = QApplication::activePopupWidget()) {
+        if (popup->isVisible()) {
+            return true;
+        }
+    }
+
+    const QWidget *rootWindow = window();
+    const QWidgetList topLevels = QApplication::topLevelWidgets();
+    for (QWidget *top : topLevels) {
+        if (!top || !top->isVisible()) {
+            continue;
+        }
+        if (top == rootWindow) {
+            continue;
+        }
+        if (qobject_cast<QDialog *>(top)) {
+            return true;
+        }
+        if (top->windowModality() != Qt::NonModal) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void MissionPage::evaluateMission3CameraPreview()
@@ -256,7 +550,7 @@ void MissionPage::evaluateMission3CameraPreview()
         } else if (popupOpen) {
             m_mission3CaptureStatus->setText(QStringLiteral("팝업 표시 중 - LIVE 일시중단"));
         } else if (m_mission3CameraActive) {
-            m_mission3CaptureStatus->setText(QStringLiteral("LIVE 활성화됨"));
+            m_mission3CaptureStatus->clear();
         } else {
             m_mission3CaptureStatus->setText(QStringLiteral("LIVE 준비 중..."));
         }
@@ -277,7 +571,7 @@ void MissionPage::evaluateMission3CameraPreview()
     if (!m_mission3CameraActive && !m_mission3CameraStarting) {
         startMission3CameraPreview();
         if (m_mission3CaptureStatus && m_mission3CameraActive) {
-            m_mission3CaptureStatus->setText(QStringLiteral("LIVE 활성화됨"));
+            m_mission3CaptureStatus->clear();
         }
     }
 }
@@ -310,7 +604,7 @@ void MissionPage::setupMission1()
     problemLayout->setSpacing(6);
 
     // Header
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 1단계 인증"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 1] - LED 모스부호"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
@@ -526,6 +820,11 @@ void MissionPage::showTerminalPopup(const QString &title,
                                      const QString &btnColor,
                                      const QColor &glowColor)
 {
+    if (m_missionNumber == 3) {
+        stopMission3CameraPreview();
+        refreshMission3PreviewPlaceholder();
+    }
+
     auto *dialog = new QDialog(this);
     dialog->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -540,7 +839,7 @@ void MissionPage::showTerminalPopup(const QString &title,
     auto *frame = new QFrame(dialog);
     frame->setObjectName(QStringLiteral("popupFrame"));
     frame->setStyleSheet(QStringLiteral(
-        "QFrame#popupFrame { background-color: #0c0c0c; border: 1px solid #444; border-radius: 6px; }"
+        "QFrame#popupFrame { background-color: #0c0c0c; border: 1px solid #10b981; border-radius: 6px; }"
         "QFrame#popupFrame QPushButton { background-color: transparent; border: none; padding: 0; }"));
     auto *frameLayout = new QVBoxLayout(frame);
     frameLayout->setContentsMargins(0, 0, 0, 0);
@@ -550,7 +849,7 @@ void MissionPage::showTerminalPopup(const QString &title,
     auto *titleBar = new QWidget(frame);
     titleBar->setFixedHeight(32);
     titleBar->setStyleSheet(QStringLiteral(
-        "background-color: #1a1a2e; border: none; border-bottom: 1px solid #444;"
+        "background-color: #1a1a2e; border: none; border-bottom: 1px solid #10b981;"
         "border-top-left-radius: 6px; border-top-right-radius: 6px;"));
     auto *titleBarLayout = new QHBoxLayout(titleBar);
     titleBarLayout->setContentsMargins(12, 0, 12, 0);
@@ -705,7 +1004,7 @@ void MissionPage::showStoryPopup()
             << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
                               "<span style='color:#00bfff; %1'>LED 점멸 신호를 해독하여 1단계 인증 코드를 입력하십시오.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:20:50]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00bfff; %1'>LED 점멸 신호는 PLAY 버튼 클릭 시 LED 2 부분에 나타납니다.</span>").arg(sf);
+                              "<span style='color:#00bfff; %1'>신호는 PLAY 버튼 클릭 시 LED 2에 나타납니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SECURITY_TERMINAL.exe"),
@@ -725,9 +1024,9 @@ void MissionPage::showStoryPopup()
             << QStringLiteral("<span style='color:#666; %1'>[17:22:13]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:22:13]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>암호를 설정한 존재는 여러분 곁에서</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>암호를 설정한 존재는 항상 여러분 곁에 있었습니다. </span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:22:14]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>LG인으로 첫 발을 내딛는 모습을 지켜봐 왔습니다.</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>그 존재는 LG인으로 첫 발을 내딛는 모습을 지켜봐 왔습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:22:16]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:22:16]</span>&nbsp;&nbsp;"
@@ -955,7 +1254,7 @@ void MissionPage::showResultPopup(bool correct)
                 << QStringLiteral("<span style='color:#666; %1'>[17:26:20]</span>&nbsp;&nbsp;"
                                   "<span style='color:#00ff41; %1'>QR 스캔 감지됨</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:26:21]</span>&nbsp;&nbsp;"
-                                  "<span style='color:#00ff41; %1'>18물리 보안 토큰 일치</span>").arg(sf)
+                                  "<span style='color:#00ff41; %1'>물리 보안 토큰 일치</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:26:22]</span>&nbsp;&nbsp;"
                                   "<span style='color:#00ff41; %1'>3단계 인증 성공</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:26:23]</span>&nbsp;&nbsp;"
@@ -1008,9 +1307,6 @@ void MissionPage::showResultPopup(bool correct)
     } else if (m_missionNumber == 4) {
         if (correct) {
             resultLines
-                << QStringLiteral("<span style='color:#00ff41; %1'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>").arg(sf)
-                << QStringLiteral("<span style='color:#00ff41; %1'>SECURITY SYSTEM v2.1</span>").arg(sf)
-                << QStringLiteral("<span style='color:#00ff41; %1'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:28:20]</span>&nbsp;&nbsp;"
                                   "<span style='color:#00ff41; %1'>서버 온도 모니터링 중...</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:28:21]</span>&nbsp;&nbsp;"
@@ -1036,9 +1332,6 @@ void MissionPage::showResultPopup(bool correct)
             emit missionCompleted(m_missionNumber);
         } else {
             resultLines
-                << QStringLiteral("<span style='color:#00ff41; %1'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>").arg(sf)
-                << QStringLiteral("<span style='color:#00ff41; %1'>SECURITY SYSTEM v2.1</span>").arg(sf)
-                << QStringLiteral("<span style='color:#00ff41; %1'>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:28:20]</span>&nbsp;&nbsp;"
                                   "<span style='color:#ff4444; %1'>서버 온도 모니터링 중...</span>").arg(sf)
                 << QStringLiteral("<span style='color:#666; %1'>[17:28:21]</span>&nbsp;&nbsp;"
@@ -1114,6 +1407,11 @@ void MissionPage::showImagePopup(const QString &imagePath,
                                   const QString &btnColor,
                                   const QColor &glowColor)
 {
+    if (m_missionNumber == 3) {
+        stopMission3CameraPreview();
+        refreshMission3PreviewPlaceholder();
+    }
+
     auto *dialog = new QDialog(this);
     dialog->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -1198,10 +1496,21 @@ void MissionPage::showImagePopup(const QString &imagePath,
 
     overlay->hide();
     overlay->deleteLater();
+
+    if (m_missionNumber == 3) {
+        QTimer::singleShot(0, this, [this]() {
+            evaluateMission3CameraPreview();
+        });
+    }
 }
 
 void MissionPage::showMission2HintPopup()
 {
+    if (m_missionNumber == 3) {
+        stopMission3CameraPreview();
+        refreshMission3PreviewPlaceholder();
+    }
+
     auto *dialog = new QDialog(this);
     dialog->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -1345,6 +1654,12 @@ void MissionPage::showMission2HintPopup()
 
     overlay->hide();
     overlay->deleteLater();
+
+    if (m_missionNumber == 3) {
+        QTimer::singleShot(0, this, [this]() {
+            evaluateMission3CameraPreview();
+        });
+    }
 }
 
 void MissionPage::resetToStory()
@@ -1403,7 +1718,7 @@ void MissionPage::setupMission2()
     problemLayout->setSpacing(6);
 
     // Header
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 2단계 인증: 보안 멜로디"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 2] - 보안 멜로디"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
@@ -1649,7 +1964,7 @@ void MissionPage::setupMission3()
     problemLayout->setContentsMargins(12, 6, 12, 6);
     problemLayout->setSpacing(6);
 
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 3단계 인증: 숨겨진 인증 코드 스캔"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 3] - 뒤섞인 인증 코드 스캔"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
@@ -1693,16 +2008,53 @@ void MissionPage::setupMission3()
     imageAreaLayout->addStretch();
     leftLayout->addWidget(imageArea, 1);
 
+    auto *btnCapture = new QPushButton(QStringLiteral("\u25b6 CAPTURE"), leftPanel);
+    btnCapture->setCursor(Qt::PointingHandCursor);
+    btnCapture->setFocusPolicy(Qt::NoFocus);
+    btnCapture->setAutoRepeat(false);
+    btnCapture->setFixedSize(200, 48);
+    btnCapture->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
+        "border-radius: 6px; font-size: 18px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; }"
+        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
+        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
+
+    auto *captureBtnGlow = new QGraphicsDropShadowEffect(btnCapture);
+    captureBtnGlow->setBlurRadius(16);
+    captureBtnGlow->setColor(QColor(0, 255, 65, 140));
+    captureBtnGlow->setOffset(0, 0);
+    btnCapture->setGraphicsEffect(captureBtnGlow);
+
     auto *captureStatus = new QLabel(QStringLiteral("스토리 팝업 종료 후 LIVE 시작"), leftPanel);
     captureStatus->setAlignment(Qt::AlignCenter);
     captureStatus->setWordWrap(true);
     captureStatus->setStyleSheet(QStringLiteral(
         "color: #7dd3fc; font-size: 13px; font-family: 'Consolas', monospace; "
         "background: transparent; border: none;"));
+    captureStatus->setVisible(false);
     m_mission3CaptureStatus = captureStatus;
 
-    leftLayout->addSpacing(10);
-    leftLayout->addWidget(captureStatus, 0, Qt::AlignHCenter);
+    auto *btnReset = new QPushButton(QStringLiteral("\u25b6 RESET"), leftPanel);
+    btnReset->setCursor(Qt::PointingHandCursor);
+    btnReset->setFocusPolicy(Qt::NoFocus);
+    btnReset->setAutoRepeat(false);
+    btnReset->setFixedSize(200, 48);
+    btnReset->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
+        "border-radius: 6px; font-size: 18px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; }"
+        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
+        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
+
+    auto *resetBtnGlow = new QGraphicsDropShadowEffect(btnReset);
+    resetBtnGlow->setBlurRadius(16);
+    resetBtnGlow->setColor(QColor(0, 255, 65, 140));
+    resetBtnGlow->setOffset(0, 0);
+    btnReset->setGraphicsEffect(resetBtnGlow);
+
+    leftLayout->addSpacing(8);
+    leftLayout->addWidget(btnReset, 0, Qt::AlignHCenter);
     leftLayout->addSpacing(14);
 
     bodyRow->addWidget(leftPanel, 1);
@@ -1717,7 +2069,7 @@ void MissionPage::setupMission3()
 
     rightLayout->addStretch();
 
-    auto *answerTitle = new QLabel(QStringLiteral("캡처된 이미지"), rightPanel);
+    auto *answerTitle = new QLabel(QStringLiteral("캡처된 이미지는 하단에 표시됩니다."), rightPanel);
     answerTitle->setAlignment(Qt::AlignCenter);
     answerTitle->setStyleSheet(QStringLiteral(
         "color: #888; font-size: 14px; font-family: 'Consolas', monospace; "
@@ -1732,24 +2084,6 @@ void MissionPage::setupMission3()
         "background: #05070b; border: 1px dashed #00ff41; border-radius: 6px;"));
     rightLayout->addWidget(capturedImageLabel, 0, Qt::AlignCenter);
     rightLayout->addSpacing(16);
-
-    auto *btnCapture = new QPushButton(QStringLiteral("\u25b6 CAPTURE"), rightPanel);
-    btnCapture->setCursor(Qt::PointingHandCursor);
-    btnCapture->setFocusPolicy(Qt::NoFocus);
-    btnCapture->setAutoRepeat(false);
-    btnCapture->setFixedSize(200, 48);
-    btnCapture->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
-
-    auto *inputBtnGlow = new QGraphicsDropShadowEffect(btnCapture);
-    inputBtnGlow->setBlurRadius(16);
-    inputBtnGlow->setColor(QColor(0, 255, 65, 140));
-    inputBtnGlow->setOffset(0, 0);
-    btnCapture->setGraphicsEffect(inputBtnGlow);
 
     auto *btnSubmit = new QPushButton(QStringLiteral("\u25b6 SUBMIT"), rightPanel);
     btnSubmit->setCursor(Qt::PointingHandCursor);
@@ -1776,6 +2110,7 @@ void MissionPage::setupMission3()
         evaluateMission3CameraPreview();
         if (!m_mission3CameraActive) {
             captureStatus->setText(QStringLiteral("카메라 시작 실패: 장치 상태를 확인하세요."));
+            resetButtonHoverState(btnCapture);
             return;
         }
 
@@ -1790,6 +2125,7 @@ void MissionPage::setupMission3()
 
             QMetaObject::invokeMethod(this, [this, btnCapture, btnSubmit, captureStatus, capturedImageLabel, result, capturePath]() {
                 btnCapture->setEnabled(true);
+                resetButtonHoverState(btnCapture);
                 m_mission3CaptureInProgress = false;
 
                 if (result == 0) {
@@ -1820,7 +2156,24 @@ void MissionPage::setupMission3()
         thread->start();
 #else
         captureStatus->setText(QStringLiteral("카메라 기능은 Linux 장치에서만 지원됩니다."));
+        resetButtonHoverState(btnCapture);
 #endif
+    });
+
+    QObject::connect(btnReset, &QPushButton::clicked, this,
+                     [this, btnReset, capturedImageLabel, captureStatus, btnSubmit]() {
+        if (m_mission3CaptureInProgress) {
+            captureStatus->setText(QStringLiteral("캡처 중에는 초기화할 수 없습니다."));
+            resetButtonHoverState(btnReset);
+            return;
+        }
+
+        m_mission3CapturedImagePath.clear();
+        capturedImageLabel->clear();
+        capturedImageLabel->setText(QStringLiteral("[ CAPTURED IMAGE ]"));
+        btnSubmit->setEnabled(s_operatorMode);
+        captureStatus->setText(QStringLiteral("캡처 결과를 초기화했습니다."));
+        resetButtonHoverState(btnReset);
     });
 
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus]() {
@@ -1850,180 +2203,225 @@ void MissionPage::setupMission3()
 
 void MissionPage::setupMission4()
 {
+    const double targetTemp = 25.2;
+    const double tempMin = 0.0;
+    const double tempMax = 50.0;
+    const double tolerance = 0.2;
+    const double graphWindowSec = 30.0;
+
     m_correctAnswer = QStringLiteral("25.2");
 
-    auto *problemPage = new QWidget(this);
-    problemPage->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
-    auto *problemLayout = new QVBoxLayout(problemPage);
-    problemLayout->setContentsMargins(10, 4, 10, 4);
-    problemLayout->setSpacing(4);
+    auto *page = new QWidget(this);
+    page->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
+    auto *pageLayout = new QVBoxLayout(page);
+    pageLayout->setContentsMargins(10, 4, 10, 4);
+    pageLayout->setSpacing(6);
 
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 4단계 인증: 서버 온도 안정화"), problemPage);
-    problemHeader->setAlignment(Qt::AlignCenter);
-    problemHeader->setStyleSheet(QStringLiteral(
+    auto *header = new QLabel(QStringLiteral("[MISSION 4] - 서버 온도 안정화"), page);
+    header->setAlignment(Qt::AlignCenter);
+    header->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
         "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-    problemLayout->addWidget(problemHeader);
+    pageLayout->addWidget(header);
 
-    auto *divider = new QFrame(problemPage);
+    auto *divider = new QFrame(page);
     divider->setFrameShape(QFrame::HLine);
     divider->setStyleSheet(QStringLiteral("background-color: #00ff41; max-height: 1px; border: none;"));
-    problemLayout->addWidget(divider);
-    problemLayout->addSpacing(2);
+    pageLayout->addWidget(divider);
+    pageLayout->addSpacing(4);
 
-    auto *bodyRow = new QHBoxLayout();
-    bodyRow->setContentsMargins(0, 0, 0, 0);
-    bodyRow->setSpacing(10);
-
-    auto *leftPanel = new QWidget(problemPage);
-    leftPanel->setStyleSheet(QStringLiteral(
+    auto *mainPanel = new QWidget(page);
+    mainPanel->setStyleSheet(QStringLiteral(
         "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
-    auto *leftLayout = new QVBoxLayout(leftPanel);
-    leftLayout->setContentsMargins(12, 10, 12, 10);
-    leftLayout->setSpacing(8);
+    auto *panelLayout = new QVBoxLayout(mainPanel);
+    panelLayout->setContentsMargins(14, 10, 14, 10);
+    panelLayout->setSpacing(6);
 
-    leftLayout->addStretch();
+    // ── Top strip: [Temperature + Status] | [Fan] ────────────────────
+    auto *topRow = new QHBoxLayout();
+    topRow->setContentsMargins(0, 0, 0, 0);
+    topRow->setSpacing(10);
 
-    auto *btnPlay = new QPushButton(QStringLiteral("\u25b6 PLAY"), leftPanel);
-    btnPlay->setCursor(Qt::PointingHandCursor);
-    btnPlay->setFocusPolicy(Qt::NoFocus);
-    btnPlay->setAutoRepeat(false);
-    btnPlay->setFixedSize(200, 48);
-    btnPlay->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1a28; color: #00bfff; border: 1px solid #00bfff; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:pressed { background-color: #0099cc; color: #0c0c0c; }"
-        "QPushButton:disabled { background-color: #111; color: #555; border: 1px solid #333; }")
-    );
+    // Left: temperature + status stacked
+    auto *infoFrame = new QFrame(mainPanel);
+    infoFrame->setStyleSheet(QStringLiteral(
+        "background: #070b0e; border: 1px solid #163848; border-radius: 6px;"));
+    auto *infoLayout = new QVBoxLayout(infoFrame);
+    infoLayout->setContentsMargins(12, 8, 12, 8);
+    infoLayout->setSpacing(4);
 
-    auto *playGlow = new QGraphicsDropShadowEffect(btnPlay);
-    playGlow->setBlurRadius(16);
-    playGlow->setColor(QColor(0, 191, 255, 140));
-    playGlow->setOffset(0, 0);
-    btnPlay->setGraphicsEffect(playGlow);
+    auto *currentFrame = new QFrame(infoFrame);
+    currentFrame->setStyleSheet(QStringLiteral(
+        "background: #071017; border: 1px solid #1e4f7a; border-radius: 4px;"));
+    auto *currentLayout = new QVBoxLayout(currentFrame);
+    currentLayout->setContentsMargins(10, 6, 10, 6);
+    currentLayout->setSpacing(0);
 
-    QObject::connect(btnPlay, &QPushButton::clicked, this, [btnPlay]() {
-        btnPlay->setEnabled(false);
-        QTimer::singleShot(3000, btnPlay, [btnPlay]() {
-            btnPlay->setEnabled(true);
-        });
-    });
+    auto *currentValue = new QLabel(QStringLiteral("현재: --.-°C"), currentFrame);
+    currentValue->setAlignment(Qt::AlignCenter);
+    currentValue->setStyleSheet(QStringLiteral(
+        "color: #00d4ff; font-size: 28px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; border: none;"));
+    currentLayout->addWidget(currentValue);
+    infoLayout->addWidget(currentFrame);
 
-    leftLayout->addWidget(btnPlay, 0, Qt::AlignCenter);
-    leftLayout->addStretch();
+    auto *statusLabel = new QLabel(QStringLiteral("STATUS: ADJUSTING..."), infoFrame);
+    statusLabel->setAlignment(Qt::AlignCenter);
+    statusLabel->setStyleSheet(QStringLiteral(
+        "color: #eab308; font-size: 13px; font-weight: 700; "
+        "font-family: 'Consolas', monospace; border: none;"));
+    infoLayout->addWidget(statusLabel);
 
-    bodyRow->addWidget(leftPanel, 1);
+    auto *modeLabel = new QLabel(QStringLiteral("THERMAL CONTROL · AUTO MODE"), infoFrame);
+    modeLabel->setAlignment(Qt::AlignCenter);
+    modeLabel->setStyleSheet(QStringLiteral(
+        "color: #6b7280; font-size: 11px; font-family: 'Consolas', monospace; border: none;"));
+    infoLayout->addWidget(modeLabel);
 
-    auto *rightPanel = new QWidget(problemPage);
-    rightPanel->setStyleSheet(QStringLiteral(
-        "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
-    auto *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(12, 10, 12, 10);
-    rightLayout->setSpacing(8);
-    rightLayout->setAlignment(Qt::AlignHCenter);
+    topRow->addWidget(infoFrame, 1);
 
-    rightLayout->addStretch();
+    // Right: compact fan
+    auto *fanPanel = new QFrame(mainPanel);
+    fanPanel->setStyleSheet(QStringLiteral(
+        "background: #070b0e; border: 1px solid #163848; border-radius: 6px;"));
+    auto *fanLayout = new QVBoxLayout(fanPanel);
+    fanLayout->setContentsMargins(8, 6, 8, 6);
+    fanLayout->setSpacing(3);
 
-    auto *answerTitle = new QLabel(QStringLiteral("현재 입력된 정답"), rightPanel);
-    answerTitle->setAlignment(Qt::AlignCenter);
-    answerTitle->setStyleSheet(QStringLiteral(
-        "color: #888; font-size: 14px; font-family: 'Consolas', monospace; "
-        "background: transparent; border: none;"));
-    rightLayout->addWidget(answerTitle);
+    auto *fanTitle = new QLabel(QStringLiteral("FAN"), fanPanel);
+    fanTitle->setAlignment(Qt::AlignCenter);
+    fanTitle->setStyleSheet(QStringLiteral(
+        "color: #6fb7d1; font-size: 10px; font-family: 'Consolas', monospace; border: none;"));
+    auto *fanWidget = new FanWidget(fanPanel);
+    auto *fanState = new QLabel(QStringLiteral("RPM: --"), fanPanel);
+    fanState->setAlignment(Qt::AlignCenter);
+    fanState->setStyleSheet(QStringLiteral(
+        "color: #7dd3fc; font-size: 10px; font-family: 'Consolas', monospace; border: none;"));
+    fanLayout->addWidget(fanTitle);
+    fanLayout->addWidget(fanWidget, 0, Qt::AlignCenter);
+    fanLayout->addWidget(fanState);
 
-    auto *answerDisplay = new QLabel(QStringLiteral("-"), rightPanel);
-    answerDisplay->setObjectName(QStringLiteral("answerDisplay"));
-    answerDisplay->setAlignment(Qt::AlignCenter);
-    answerDisplay->setMinimumHeight(48);
-    answerDisplay->setStyleSheet(QStringLiteral(
-        "color: #00ff41; font-size: 28px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-    rightLayout->addWidget(answerDisplay);
-    rightLayout->addSpacing(10);
+    topRow->addWidget(fanPanel, 0);
+    panelLayout->addLayout(topRow);
 
-    auto *btnInput = new QPushButton(QStringLiteral("\u25b6 INPUT"), rightPanel);
-    btnInput->setCursor(Qt::PointingHandCursor);
-    btnInput->setFocusPolicy(Qt::NoFocus);
-    btnInput->setAutoRepeat(false);
-    btnInput->setFixedSize(200, 48);
-    btnInput->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
+    // ── Graph: fills remaining vertical space ────────────────────────
+    auto *graphFrame = new QFrame(mainPanel);
+    graphFrame->setStyleSheet(QStringLiteral(
+        "background: #05070b; border: 1px solid #1e4a29; border-radius: 6px;"));
+    auto *graphFrameLayout = new QVBoxLayout(graphFrame);
+    graphFrameLayout->setContentsMargins(6, 4, 6, 4);
+    graphFrameLayout->setSpacing(2);
 
-    auto *inputBtnGlow = new QGraphicsDropShadowEffect(btnInput);
-    inputBtnGlow->setBlurRadius(16);
-    inputBtnGlow->setColor(QColor(0, 255, 65, 140));
-    inputBtnGlow->setOffset(0, 0);
-    btnInput->setGraphicsEffect(inputBtnGlow);
+    auto *graphLabel = new QLabel(QStringLiteral("실시간 서버 온도 추이"), graphFrame);
+    graphLabel->setAlignment(Qt::AlignCenter);
+    graphLabel->setStyleSheet(QStringLiteral(
+        "color: #89d3ff; font-size: 11px; font-family: 'Consolas', monospace; border: none;"));
+    graphFrameLayout->addWidget(graphLabel);
 
-    auto *btnSubmit = new QPushButton(QStringLiteral("\u25b6 SUBMIT"), rightPanel);
-    btnSubmit->setCursor(Qt::PointingHandCursor);
-    btnSubmit->setFocusPolicy(Qt::NoFocus);
-    btnSubmit->setAutoRepeat(false);
-    btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(s_operatorMode);
-    btnSubmit->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: #ff4444; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: #cc3333; color: #0c0c0c; }"));
+    auto *graphWidget = new TemperatureGraphWidget(graphFrame);
+    graphWidget->setRanges(tempMin, tempMax, graphWindowSec);
+    graphWidget->setTargetTemperature(targetTemp);
+    graphWidget->setShowTargetLine(false);
+    graphFrameLayout->addWidget(graphWidget, 1);
 
-    auto *submitGlow = new QGraphicsDropShadowEffect(btnSubmit);
-    submitGlow->setBlurRadius(14);
-    submitGlow->setColor(QColor(255, 68, 68, 140));
-    submitGlow->setOffset(0, 0);
-    btnSubmit->setGraphicsEffect(submitGlow);
+    panelLayout->addWidget(graphFrame, 1);
 
-    QObject::connect(btnInput, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit, btnInput]() {
-        bool ok = false;
-        const QString answer = TeamNameDialog::getInput(
-            this,
-            QStringLiteral("ENTER ANSWER"),
-            QStringLiteral("정답을 입력해주세요."),
-            20,
-            &ok);
-        if (ok && !answer.isEmpty()) {
-            m_answerInputRaw = answer;
-            answerDisplay->setText(answer);
-            btnSubmit->setEnabled(true);
+    pageLayout->addWidget(mainPanel, 1);
+    m_contentLayout->addWidget(page);
+
+    double *currentTemp = new double(30.0 + QRandomGenerator::global()->bounded(80) / 10.0);
+    double *elapsedSec = new double(0.0);
+    double *inRangeSec = new double(0.0);
+    bool *completed = new bool(false);
+
+    auto updateTelemetry = [=](bool appendGraphPoint) {
+        const double diff = qAbs(*currentTemp - targetTemp);
+        const bool locked = diff <= tolerance;
+
+        currentValue->setText(QStringLiteral("현재: %1°C").arg(*currentTemp, 0, 'f', 1));
+        if (locked) {
+            currentFrame->setStyleSheet(QStringLiteral(
+                "background: #07160b; border: 1px solid #00ff88; border-radius: 6px;"));
+            currentValue->setStyleSheet(QStringLiteral(
+                "color: #00ff88; font-size: 26px; font-weight: 800; font-family: 'Consolas', monospace; border: none;"));
+            statusLabel->setText(QStringLiteral("STATUS: TARGET LOCKED"));
+            statusLabel->setStyleSheet(QStringLiteral(
+                "color: #00ff88; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
+        } else if (*currentTemp > targetTemp) {
+            currentFrame->setStyleSheet(QStringLiteral(
+                "background: #170707; border: 1px solid #7a1e1e; border-radius: 6px;"));
+            currentValue->setStyleSheet(QStringLiteral(
+                "color: #ff6868; font-size: 26px; font-weight: 800; font-family: 'Consolas', monospace; border: none;"));
+            statusLabel->setText(QStringLiteral("STATUS: OVERHEAT"));
+            statusLabel->setStyleSheet(QStringLiteral(
+                "color: #ff5555; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
+        } else {
+            currentFrame->setStyleSheet(QStringLiteral(
+                "background: #071017; border: 1px solid #1e4f7a; border-radius: 6px;"));
+            currentValue->setStyleSheet(QStringLiteral(
+                "color: #00d4ff; font-size: 26px; font-weight: 800; font-family: 'Consolas', monospace; border: none;"));
+            statusLabel->setText(QStringLiteral("STATUS: TOO COLD"));
+            statusLabel->setStyleSheet(QStringLiteral(
+                "color: #4db8ff; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
         }
 
-        resetButtonHoverState(btnInput);
-    });
+        const double fanRatio = qBound(0.15, diff / 8.0 + 0.15, 1.0);
+        fanWidget->setSpeedRatio(fanRatio);
+        fanState->setText(QStringLiteral("RPM: %1").arg(static_cast<int>(900 + fanRatio * 2400)));
 
-    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty() && !s_operatorMode) return;
-        const bool correct = isAnswerAccepted(m_answerInputRaw);
-        showResultPopup(correct);
-        if (!correct) {
-            m_answerInputRaw.clear();
-            answerDisplay->setText(QStringLiteral("-"));
-            btnSubmit->setEnabled(false);
+        if (appendGraphPoint) {
+            graphWidget->appendSample(*elapsedSec, *currentTemp);
         }
+    };
+
+    auto *fanTimer = new QTimer(page);
+    fanTimer->setInterval(40);
+    QObject::connect(fanTimer, &QTimer::timeout, fanWidget, [fanWidget]() {
+        fanWidget->advance();
+    });
+    fanTimer->start();
+
+    auto checkComplete = [=]() {
+        if (*completed || s_operatorMode) {
+            return;
+        }
+
+        if (qAbs(*currentTemp - targetTemp) <= tolerance) {
+            *inRangeSec += 0.4;
+            if (*inRangeSec >= 1.2) {
+                *completed = true;
+                QTimer::singleShot(350, this, [this]() { showResultPopup(true); });
+            }
+        } else {
+            *inRangeSec = 0.0;
+        }
+    };
+
+    auto *driftTimer = new QTimer(page);
+    driftTimer->setInterval(400);
+    QObject::connect(driftTimer, &QTimer::timeout, this, [=]() {
+        if (*completed) {
+            return;
+        }
+
+        *elapsedSec += 0.4;
+        const int randomDrift = static_cast<int>(QRandomGenerator::global()->bounded(3u)) - 1;
+        const double approach = (targetTemp - *currentTemp) * 0.08;
+        *currentTemp = qBound(tempMin, *currentTemp + approach + randomDrift * 0.08, tempMax);
+        updateTelemetry(true);
+        checkComplete();
     });
 
-    auto *actionRow = new QHBoxLayout();
-    actionRow->setContentsMargins(0, 0, 0, 0);
-    actionRow->setSpacing(12);
-    actionRow->addStretch();
-    actionRow->addWidget(btnInput);
-    actionRow->addWidget(btnSubmit);
-    actionRow->addStretch();
-    rightLayout->addLayout(actionRow);
+    updateTelemetry(true);
+    driftTimer->start();
 
-    rightLayout->addStretch();
-
-    bodyRow->addWidget(rightPanel, 1);
-    problemLayout->addLayout(bodyRow, 1);
-
-    m_contentLayout->addWidget(problemPage);
+    QObject::connect(page, &QObject::destroyed, [currentTemp, elapsedSec, inRangeSec, completed]() {
+        delete currentTemp;
+        delete elapsedSec;
+        delete inRangeSec;
+        delete completed;
+    });
 }
-
 void MissionPage::setupMission5()
 {
     m_correctAnswer = QStringLiteral("5");
@@ -2034,7 +2432,7 @@ void MissionPage::setupMission5()
     problemLayout->setContentsMargins(12, 6, 12, 6);
     problemLayout->setSpacing(6);
 
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 5단계 인증: 최종 잠금 해제"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 5] - 최종 잠금 해제"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
