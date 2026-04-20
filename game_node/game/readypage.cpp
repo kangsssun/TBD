@@ -11,6 +11,8 @@
 #include <QTimer>
 #include <QGraphicsDropShadowEffect>
 #include <QFont>
+#include <QDialog>
+#include <QScrollArea>
 
 ReadyPage::ReadyPage(QWidget *parent)
     : QWidget(parent)
@@ -106,6 +108,7 @@ void ReadyPage::addGmDirectMessage(const QString &text)
 void ReadyPage::setMissionProgress(int percent)
 {
     percent = qBound(0, percent, 100);
+    m_currentProgress = percent;
     if (m_missionProgressBar) m_missionProgressBar->setValue(percent);
     if (m_missionPercentLabel) m_missionPercentLabel->setText(QStringLiteral("%1%").arg(percent));
 }
@@ -145,13 +148,11 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
 
         // When mission completes, advance to the next mission
         QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {
-            // 진행도 20% 증가
-            m_currentProgress = qMin(100, m_currentProgress + 20);
-            setMissionProgress(m_currentProgress);
+            setMissionProgress(m_currentProgress + 20);
 
-            // 서버에 진행도 전송
-            if (m_progressUpdateCb)
+            if (m_progressUpdateCb) {
                 m_progressUpdateCb(completedNumber + 1, m_currentProgress);
+            }
 
             auto *nextMission = new MissionPage(completedNumber + 1, this);
             setMissionWidget(nextMission);
@@ -239,8 +240,129 @@ void ReadyPage::setupUi()
         ContactGmDialog::show(this, m_teamName, m_directMessages, m_sendMessageCb);
     });
 
+    auto *helpButton = new QPushButton(QStringLiteral("GUIDE"), headerButtonArea);
+    helpButton->setObjectName(QStringLiteral("helpButton"));
+    helpButton->setCursor(Qt::PointingHandCursor);
+    helpButton->setFixedHeight(headerControlHeight);
+    helpButton->setFixedWidth(contactGmButton->sizeHint().width());
+    QObject::connect(helpButton, &QPushButton::clicked, this, [this]() {
+        QDialog dialog(this);
+        dialog.setObjectName(QStringLiteral("gameHelpDialog"));
+        dialog.setWindowTitle(QStringLiteral("GAME GUIDE"));
+        dialog.setModal(true);
+        dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        dialog.setAttribute(Qt::WA_StyledBackground, true);
+        dialog.setFixedSize(760, 520);
+        dialog.setStyleSheet(QStringLiteral(R"(
+            QDialog#gameHelpDialog {
+                background-color: #0b1220;
+                border: 1px solid #10b981;
+                border-radius: 12px;
+            }
+            QLabel#helpTitle {
+                background: transparent;
+                color: #ffffff;
+                font-size: 28px;
+                font-weight: 800;
+                letter-spacing: 2px;
+            }
+            QLabel#helpBody {
+                background-color: #0b1220;
+                color: #e5e7eb;
+                font-size: 15px;
+                line-height: 1.45em;
+            }
+            QWidget#helpBodyContainer {
+                background-color: #0b1220;
+            }
+            QPushButton#helpCloseButton {
+                background-color: #142338;
+                color: #bfdbfe;
+                border: 1px solid #2563eb;
+                border-radius: 8px;
+                padding: 10px 24px;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            QPushButton#helpCloseButton:hover {
+                background-color: #1a3150;
+                color: #ffffff;
+            }
+            QPushButton#helpCloseButton:pressed {
+                background-color: #2563eb;
+                color: #ffffff;
+            }
+            QScrollArea#helpScroll {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea#helpScroll > QWidget > QWidget {
+                background-color: #0b1220;
+            }
+        )"));
+
+        auto *layout = new QVBoxLayout(&dialog);
+        layout->setContentsMargins(24, 24, 24, 20);
+        layout->setSpacing(16);
+
+        auto *titleLabel = new QLabel(QStringLiteral("GAME GUIDE"), &dialog);
+        titleLabel->setObjectName(QStringLiteral("helpTitle"));
+        titleLabel->setAlignment(Qt::AlignCenter);
+
+        auto *scroll = new QScrollArea(&dialog);
+        scroll->setObjectName(QStringLiteral("helpScroll"));
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+        auto *bodyContainer = new QWidget();
+        bodyContainer->setObjectName(QStringLiteral("helpBodyContainer"));
+        auto *bodyLayout = new QVBoxLayout(bodyContainer);
+        bodyLayout->setContentsMargins(0, 0, 0, 0);
+        bodyLayout->setSpacing(10);
+
+        auto *bodyLabel = new QLabel(bodyContainer);
+        bodyLabel->setObjectName(QStringLiteral("helpBody"));
+        bodyLabel->setWordWrap(true);
+        bodyLabel->setTextFormat(Qt::RichText);
+        bodyLabel->setText(QStringLiteral(
+            "<b>게임 진행</b><br>"
+            "- 총 5개 미션을 순서대로 해결합니다.<br>"
+            "- 미션 제출 성공 시 자동으로 다음 미션으로 이동합니다.<br><br>"
+            "<b>상단 버튼 설명</b><br>"
+            "- SYSTEM NOTICES: 운영자 공지 확인<br>"
+            "- CONTACT GM: GM에게 문의 메시지 전송<br>"
+            "- GUIDE: 현재 도움말 창 열기<br><br>"
+            "<b>미션 화면 버튼 설명</b><br>"
+            "- PLAY: 미션별 힌트/신호 재생<br>"
+            "- INPUT: 정답 직접 입력 팝업 열기<br>"
+            "- CAPTURE: 카메라 화면 캡처 (미션3)<br>"
+            "- RESET: 캡처 결과 초기화 (미션3)<br>"
+            "- SUBMIT: 현재 입력/캡처 결과 제출"));
+
+        bodyLayout->addWidget(bodyLabel);
+        bodyLayout->addStretch();
+        scroll->setWidget(bodyContainer);
+
+        auto *closeButton = new QPushButton(QStringLiteral("닫기"), &dialog);
+        closeButton->setObjectName(QStringLiteral("helpCloseButton"));
+        closeButton->setCursor(Qt::PointingHandCursor);
+        closeButton->setFixedHeight(46);
+
+        layout->addWidget(titleLabel);
+        layout->addWidget(scroll, 1);
+        layout->addWidget(closeButton, 0, Qt::AlignRight);
+
+        QObject::connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+        const QPoint centerGlobal = this->mapToGlobal(this->rect().center());
+        dialog.move(centerGlobal - QPoint(dialog.width() / 2, dialog.height() / 2));
+        dialog.exec();
+    });
+
     headerButtonLayout->addWidget(systemNoticesButton);
     headerButtonLayout->addWidget(contactGmButton);
+    headerButtonLayout->addWidget(helpButton);
 
     topBarLayout->addWidget(m_systemUserLabel, 3);
     topBarLayout->addWidget(timerBox, 1, Qt::AlignLeft);

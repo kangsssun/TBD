@@ -164,7 +164,7 @@ void EmergencyPage::setupUi()
         QStringLiteral("비콘 및 패스트 파이브 출입 시스템 전면에 장애가 발생했습니다.\n\n"
                        "원인은 아직 밝혀지지 않았으며 복구 시까지 모든 교육생은 퇴실 불가입니다.\n\n"
                        "5단계 인증을 통해 시스템 복구 코드를 획득한 팀부터 순서대로 퇴실이 승인됩니다.\n\n"
-                       "- LG SW Bootcamp 12기 교육 담당자 드림"),
+                       "- LG SW Bootcamp 12기 교육 담당자 드림 -"),
         textContainer);
     noticeBody->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     noticeBody->setWordWrap(true);
