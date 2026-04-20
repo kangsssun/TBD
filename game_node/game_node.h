@@ -69,6 +69,7 @@ private:
     bool m_ignoreTitleTap;
     QProcess *m_titleAudioProcess;
     bool m_titleMusicStarted;
+    bool m_operatorMode;
 
     QTcpSocket m_socket;
     QString m_serverIp;

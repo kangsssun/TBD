@@ -49,6 +49,32 @@ void resetButtonHoverState(QPushButton *button)
 }
 }
 
+bool MissionPage::s_operatorMode = false;
+
+void MissionPage::setOperatorMode(bool enabled)
+{
+    s_operatorMode = enabled;
+}
+
+bool MissionPage::isOperatorMode()
+{
+    return s_operatorMode;
+}
+
+void MissionPage::syncOperatorModeUi()
+{
+    if (!s_operatorMode) {
+        return;
+    }
+
+    const QList<QPushButton *> buttons = findChildren<QPushButton *>();
+    for (QPushButton *button : buttons) {
+        if (button && button->text().contains(QStringLiteral("SUBMIT"), Qt::CaseInsensitive)) {
+            button->setEnabled(true);
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Constructor
 // ═══════════════════════════════════════════════════════════════════════════
@@ -64,6 +90,7 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
     , m_mission3StoryPopupDismissed(false)
     , m_mission3CaptureInProgress(false)
     , m_mission3PendingStop(false)
+    , m_mission3CapturedImagePath()
 {
     setObjectName(QStringLiteral("missionPage_%1").arg(missionNumber));
 
@@ -92,6 +119,7 @@ MissionPage::~MissionPage()
 void MissionPage::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    syncOperatorModeUi();
     if (m_missionNumber == 3) {
         if (m_mission3PopupWatchTimer && !m_mission3PopupWatchTimer->isActive()) {
             m_mission3PopupWatchTimer->start();
@@ -136,13 +164,46 @@ void MissionPage::startMission3CameraPreview()
         return;
     }
 
-    const int width = qMax(160, m_mission3PreviewArea->width());
-    const int height = qMax(120, m_mission3PreviewArea->height());
-    if (width <= 0 || height <= 0) {
+    const QRect rawPreviewRect(
+        m_mission3PreviewArea->mapToGlobal(QPoint(0, 0)),
+        m_mission3PreviewArea->size());
+    if (!rawPreviewRect.isValid()) {
         return;
     }
 
-    const QPoint topLeft = m_mission3PreviewArea->mapToGlobal(QPoint(0, 0));
+    QScreen *targetScreen = m_mission3PreviewArea->screen();
+    if (!targetScreen) {
+        targetScreen = QApplication::screenAt(rawPreviewRect.center());
+    }
+    if (!targetScreen) {
+        targetScreen = QApplication::primaryScreen();
+    }
+
+    const QRect screenRect = targetScreen
+        ? targetScreen->geometry()
+        : QRect(rawPreviewRect.topLeft(), rawPreviewRect.size());
+    QRect boundedPreviewRect = rawPreviewRect.intersected(screenRect);
+    if (boundedPreviewRect.width() < 40 || boundedPreviewRect.height() < 40) {
+        return;
+    }
+
+    int width = qMax(40, boundedPreviewRect.width());
+    int height = qMax(40, boundedPreviewRect.height());
+
+    if (width % 2 != 0) {
+        --width;
+    }
+    if (height % 2 != 0) {
+        --height;
+    }
+    if (width < 2 || height < 2) {
+        return;
+    }
+
+    const int drawX = boundedPreviewRect.left();
+    const int drawY = boundedPreviewRect.top();
+
+    const QPoint topLeft(drawX, drawY);
 
     m_mission3CameraStarting = true;
     const int result = camera_init(topLeft.x(), topLeft.y(), width, height);
@@ -223,6 +284,10 @@ void MissionPage::evaluateMission3CameraPreview()
 
 bool MissionPage::isAnswerAccepted(const QString &answer) const
 {
+    if (s_operatorMode) {
+        return true;
+    }
+
     const QString normalized = answer.trimmed();
     if (normalized.compare(QStringLiteral("9999"), Qt::CaseInsensitive) == 0) {
         return true;
@@ -392,7 +457,7 @@ void MissionPage::setupMission1()
     btnSubmit->setFocusPolicy(Qt::NoFocus);
     btnSubmit->setAutoRepeat(false);
     btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(false);
+    btnSubmit->setEnabled(s_operatorMode);
     btnSubmit->setStyleSheet(QStringLiteral(
         "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
         "border-radius: 6px; font-size: 18px; font-weight: 800; "
@@ -424,7 +489,7 @@ void MissionPage::setupMission1()
     });
 
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty()) return;
+        if (m_answerInputRaw.isEmpty() && !s_operatorMode) return;
         const bool correct = isAnswerAccepted(m_answerInputRaw);
         showResultPopup(correct);
         if (!correct) {
@@ -609,6 +674,14 @@ void MissionPage::showTerminalPopup(const QString &title,
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::showStoryPopup()
 {
+    if (s_operatorMode) {
+        if (m_missionNumber == 3) {
+            m_mission3StoryPopupDismissed = true;
+            evaluateMission3CameraPreview();
+        }
+        return;
+    }
+
     const QString sf = QStringLiteral(
         "font-size:16px; font-family:Consolas,Courier New,monospace; "
         "font-weight:500; letter-spacing:-1px;");
@@ -747,6 +820,11 @@ void MissionPage::showStoryPopup()
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::showResultPopup(bool correct)
 {
+    if (s_operatorMode) {
+        emit missionCompleted(m_missionNumber);
+        return;
+    }
+
     const QString sf = QStringLiteral(
         "font-size:16px; font-family:Consolas,Courier New,monospace; "
         "font-weight:500; letter-spacing:-1px;");
@@ -1272,9 +1350,18 @@ void MissionPage::showMission2HintPopup()
 void MissionPage::resetToStory()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
+        syncOperatorModeUi();
         if (m_missionNumber == 3) {
             m_mission3StoryPopupDismissed = false;
+            m_mission3CapturedImagePath.clear();
             evaluateMission3CameraPreview();
+        }
+        if (s_operatorMode) {
+            if (m_missionNumber == 3) {
+                m_mission3StoryPopupDismissed = true;
+                evaluateMission3CameraPreview();
+            }
+            return;
         }
         showStoryPopup();
     }
@@ -1283,9 +1370,18 @@ void MissionPage::resetToStory()
 void MissionPage::startMission()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
+        syncOperatorModeUi();
         if (m_missionNumber == 3) {
             m_mission3StoryPopupDismissed = false;
+            m_mission3CapturedImagePath.clear();
             evaluateMission3CameraPreview();
+        }
+        if (s_operatorMode) {
+            if (m_missionNumber == 3) {
+                m_mission3StoryPopupDismissed = true;
+                evaluateMission3CameraPreview();
+            }
+            return;
         }
         QTimer::singleShot(500, this, [this]() {
             showStoryPopup();
@@ -1483,7 +1579,7 @@ void MissionPage::setupMission2()
     btnSubmit->setFocusPolicy(Qt::NoFocus);
     btnSubmit->setAutoRepeat(false);
     btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(false);
+    btnSubmit->setEnabled(s_operatorMode);
     btnSubmit->setStyleSheet(QStringLiteral(
         "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
         "border-radius: 6px; font-size: 18px; font-weight: 800; "
@@ -1514,14 +1610,8 @@ void MissionPage::setupMission2()
         resetButtonHoverState(btnInput);
     });
 
-    auto *inputBtnRow = new QHBoxLayout();
-    inputBtnRow->addStretch();
-    inputBtnRow->addWidget(btnInput);
-    inputBtnRow->addStretch();
-    rightLayout->addLayout(inputBtnRow);
-
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty()) return;
+        if (m_answerInputRaw.isEmpty() && !s_operatorMode) return;
         const bool correct = isAnswerAccepted(m_answerInputRaw);
         showResultPopup(correct);
         if (!correct) {
@@ -1531,11 +1621,14 @@ void MissionPage::setupMission2()
         }
     });
 
-    auto *submitRow = new QHBoxLayout();
-    submitRow->addStretch();
-    submitRow->addWidget(btnSubmit);
-    submitRow->addStretch();
-    rightLayout->addLayout(submitRow);
+    auto *actionRow = new QHBoxLayout();
+    actionRow->setContentsMargins(0, 0, 0, 0);
+    actionRow->setSpacing(12);
+    actionRow->addStretch();
+    actionRow->addWidget(btnInput);
+    actionRow->addWidget(btnSubmit);
+    actionRow->addStretch();
+    rightLayout->addLayout(actionRow);
 
     rightLayout->addStretch();
 
@@ -1588,7 +1681,7 @@ void MissionPage::setupMission3()
 
     auto *imageLabel = new QLabel(QStringLiteral("[ LIVE CAMERA ]"), imageArea);
     imageLabel->setAlignment(Qt::AlignCenter);
-    imageLabel->setMinimumSize(380, 350);
+    imageLabel->setFixedSize(320, 240);
     imageLabel->setStyleSheet(QStringLiteral(
         "color: #00bfff; font-size: 18px; font-family: 'Consolas', monospace; "
         "background: #05070b; border: 1px dashed #00bfff; border-radius: 6px;"));
@@ -1600,25 +1693,6 @@ void MissionPage::setupMission3()
     imageAreaLayout->addStretch();
     leftLayout->addWidget(imageArea, 1);
 
-    auto *btnCapture = new QPushButton(QStringLiteral("\u25b6 CAPTURE"), leftPanel);
-    btnCapture->setCursor(Qt::PointingHandCursor);
-    btnCapture->setFocusPolicy(Qt::NoFocus);
-    btnCapture->setAutoRepeat(false);
-    btnCapture->setFixedSize(200, 48);
-    btnCapture->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1a28; color: #00bfff; border: 1px solid #00bfff; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:pressed { background-color: #0099cc; color: #0c0c0c; }"
-        "QPushButton:disabled { background-color: #111; color: #555; border: 1px solid #333; }")
-    );
-
-    auto *playGlow = new QGraphicsDropShadowEffect(btnCapture);
-    playGlow->setBlurRadius(16);
-    playGlow->setColor(QColor(0, 191, 255, 140));
-    playGlow->setOffset(0, 0);
-    btnCapture->setGraphicsEffect(playGlow);
-
     auto *captureStatus = new QLabel(QStringLiteral("스토리 팝업 종료 후 LIVE 시작"), leftPanel);
     captureStatus->setAlignment(Qt::AlignCenter);
     captureStatus->setWordWrap(true);
@@ -1627,33 +1701,110 @@ void MissionPage::setupMission3()
         "background: transparent; border: none;"));
     m_mission3CaptureStatus = captureStatus;
 
-    QObject::connect(btnCapture, &QPushButton::clicked, this, [this, btnCapture, captureStatus]() {
+    leftLayout->addSpacing(10);
+    leftLayout->addWidget(captureStatus, 0, Qt::AlignHCenter);
+    leftLayout->addSpacing(14);
+
+    bodyRow->addWidget(leftPanel, 1);
+
+    auto *rightPanel = new QWidget(problemPage);
+    rightPanel->setStyleSheet(QStringLiteral(
+        "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
+    auto *rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(16, 14, 16, 14);
+    rightLayout->setSpacing(12);
+    rightLayout->setAlignment(Qt::AlignHCenter);
+
+    rightLayout->addStretch();
+
+    auto *answerTitle = new QLabel(QStringLiteral("캡처된 이미지"), rightPanel);
+    answerTitle->setAlignment(Qt::AlignCenter);
+    answerTitle->setStyleSheet(QStringLiteral(
+        "color: #888; font-size: 14px; font-family: 'Consolas', monospace; "
+        "background: transparent; border: none;"));
+    rightLayout->addWidget(answerTitle);
+
+    auto *capturedImageLabel = new QLabel(QStringLiteral("[ CAPTURED IMAGE ]"), rightPanel);
+    capturedImageLabel->setAlignment(Qt::AlignCenter);
+    capturedImageLabel->setFixedSize(320, 240);
+    capturedImageLabel->setStyleSheet(QStringLiteral(
+        "color: #00ff41; font-size: 18px; font-family: 'Consolas', monospace; "
+        "background: #05070b; border: 1px dashed #00ff41; border-radius: 6px;"));
+    rightLayout->addWidget(capturedImageLabel, 0, Qt::AlignCenter);
+    rightLayout->addSpacing(16);
+
+    auto *btnCapture = new QPushButton(QStringLiteral("\u25b6 CAPTURE"), rightPanel);
+    btnCapture->setCursor(Qt::PointingHandCursor);
+    btnCapture->setFocusPolicy(Qt::NoFocus);
+    btnCapture->setAutoRepeat(false);
+    btnCapture->setFixedSize(200, 48);
+    btnCapture->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
+        "border-radius: 6px; font-size: 18px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; }"
+        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
+        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
+
+    auto *inputBtnGlow = new QGraphicsDropShadowEffect(btnCapture);
+    inputBtnGlow->setBlurRadius(16);
+    inputBtnGlow->setColor(QColor(0, 255, 65, 140));
+    inputBtnGlow->setOffset(0, 0);
+    btnCapture->setGraphicsEffect(inputBtnGlow);
+
+    auto *btnSubmit = new QPushButton(QStringLiteral("\u25b6 SUBMIT"), rightPanel);
+    btnSubmit->setCursor(Qt::PointingHandCursor);
+    btnSubmit->setFocusPolicy(Qt::NoFocus);
+    btnSubmit->setAutoRepeat(false);
+    btnSubmit->setFixedSize(200, 48);
+    btnSubmit->setEnabled(s_operatorMode);
+    btnSubmit->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
+        "border-radius: 6px; font-size: 18px; font-weight: 800; "
+        "font-family: 'Consolas', monospace; }"
+        "QPushButton:hover { background-color: #ff4444; color: #0c0c0c; }"
+        "QPushButton:pressed { background-color: #cc3333; color: #0c0c0c; }"));
+
+    auto *submitGlow = new QGraphicsDropShadowEffect(btnSubmit);
+    submitGlow->setBlurRadius(14);
+    submitGlow->setColor(QColor(255, 68, 68, 140));
+    submitGlow->setOffset(0, 0);
+    btnSubmit->setGraphicsEffect(submitGlow);
+
+    QObject::connect(btnCapture, &QPushButton::clicked, this,
+                     [this, btnCapture, btnSubmit, captureStatus, capturedImageLabel]() {
 #ifdef Q_OS_LINUX
         evaluateMission3CameraPreview();
-
         if (!m_mission3CameraActive) {
             captureStatus->setText(QStringLiteral("카메라 시작 실패: 장치 상태를 확인하세요."));
             return;
         }
-
-        captureStatus->setText(QStringLiteral("LIVE 활성화됨"));
 
         btnCapture->setEnabled(false);
         captureStatus->setText(QStringLiteral("캡처 중..."));
         m_mission3CaptureInProgress = true;
 
         const QString capturePath = buildMission3CapturePath();
-        auto *thread = QThread::create([this, btnCapture, captureStatus, capturePath]() {
+        auto *thread = QThread::create([this, btnCapture, btnSubmit, captureStatus, capturedImageLabel, capturePath]() {
             const QByteArray pathBytes = capturePath.toLocal8Bit();
             const int result = camera_capture(pathBytes.constData());
 
-            QMetaObject::invokeMethod(this, [this, btnCapture, captureStatus, result, capturePath]() {
+            QMetaObject::invokeMethod(this, [this, btnCapture, btnSubmit, captureStatus, capturedImageLabel, result, capturePath]() {
                 btnCapture->setEnabled(true);
                 m_mission3CaptureInProgress = false;
+
                 if (result == 0) {
-                    captureStatus->setText(QStringLiteral("저장 완료: %1").arg(capturePath));
+                    m_mission3CapturedImagePath = capturePath;
+                    QPixmap capturedPixmap(capturePath);
+                    if (!capturedPixmap.isNull()) {
+                        capturedImageLabel->setPixmap(capturedPixmap.scaled(
+                            capturedImageLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                        capturedImageLabel->setText(QString());
+                    }
+                    captureStatus->setText(QStringLiteral("저장 완료"));
+                    btnSubmit->setEnabled(true);
                 } else {
                     captureStatus->setText(QStringLiteral("캡처 실패: 카메라 프레임 수신 오류"));
+                    btnSubmit->setEnabled(false);
                 }
 
                 if (m_mission3PendingStop) {
@@ -1672,111 +1823,19 @@ void MissionPage::setupMission3()
 #endif
     });
 
-    leftLayout->addSpacing(20);
-    leftLayout->addWidget(btnCapture, 0, Qt::AlignCenter);
-    leftLayout->addSpacing(8);
-    leftLayout->addWidget(captureStatus, 0, Qt::AlignHCenter);
-    leftLayout->addSpacing(14);
-
-    bodyRow->addWidget(leftPanel, 1);
-
-    auto *rightPanel = new QWidget(problemPage);
-    rightPanel->setStyleSheet(QStringLiteral(
-        "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
-    auto *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(16, 14, 16, 14);
-    rightLayout->setSpacing(12);
-    rightLayout->setAlignment(Qt::AlignHCenter);
-
-    rightLayout->addStretch();
-
-    auto *answerTitle = new QLabel(QStringLiteral("현재 입력된 정답"), rightPanel);
-    answerTitle->setAlignment(Qt::AlignCenter);
-    answerTitle->setStyleSheet(QStringLiteral(
-        "color: #888; font-size: 14px; font-family: 'Consolas', monospace; "
-        "background: transparent; border: none;"));
-    rightLayout->addWidget(answerTitle);
-
-    auto *answerDisplay = new QLabel(QStringLiteral("-"), rightPanel);
-    answerDisplay->setObjectName(QStringLiteral("answerDisplay"));
-    answerDisplay->setAlignment(Qt::AlignCenter);
-    answerDisplay->setMinimumHeight(48);
-    answerDisplay->setStyleSheet(QStringLiteral(
-        "color: #00ff41; font-size: 28px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-    rightLayout->addWidget(answerDisplay);
-    rightLayout->addSpacing(16);
-
-    auto *btnInput = new QPushButton(QStringLiteral("\u25b6 INPUT"), rightPanel);
-    btnInput->setCursor(Qt::PointingHandCursor);
-    btnInput->setFocusPolicy(Qt::NoFocus);
-    btnInput->setAutoRepeat(false);
-    btnInput->setFixedSize(200, 48);
-    btnInput->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1628; color: #00ff41; border: 1px solid #00ff41; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: #00ff41; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: #00cc33; color: #0c0c0c; }"));
-
-    auto *inputBtnGlow = new QGraphicsDropShadowEffect(btnInput);
-    inputBtnGlow->setBlurRadius(16);
-    inputBtnGlow->setColor(QColor(0, 255, 65, 140));
-    inputBtnGlow->setOffset(0, 0);
-    btnInput->setGraphicsEffect(inputBtnGlow);
-
-    auto *btnSubmit = new QPushButton(QStringLiteral("\u25b6 SUBMIT"), rightPanel);
-    btnSubmit->setCursor(Qt::PointingHandCursor);
-    btnSubmit->setFocusPolicy(Qt::NoFocus);
-    btnSubmit->setAutoRepeat(false);
-    btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(false);
-    btnSubmit->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
-        "border-radius: 6px; font-size: 18px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: #ff4444; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: #cc3333; color: #0c0c0c; }"));
-
-    auto *submitGlow = new QGraphicsDropShadowEffect(btnSubmit);
-    submitGlow->setBlurRadius(14);
-    submitGlow->setColor(QColor(255, 68, 68, 140));
-    submitGlow->setOffset(0, 0);
-    btnSubmit->setGraphicsEffect(submitGlow);
-
-    QObject::connect(btnInput, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit, btnInput]() {
-        bool ok = false;
-        const QString answer = TeamNameDialog::getInput(
-            this,
-            QStringLiteral("ENTER ANSWER"),
-            QStringLiteral("정답을 입력해주세요."),
-            20,
-            &ok);
-        if (ok && !answer.isEmpty()) {
-            m_answerInputRaw = answer;
-            answerDisplay->setText(answer);
-            btnSubmit->setEnabled(true);
+    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus]() {
+        if (m_mission3CapturedImagePath.isEmpty() && !s_operatorMode) {
+            captureStatus->setText(QStringLiteral("제출할 캡처 이미지를 먼저 생성하세요."));
+            return;
         }
-
-        resetButtonHoverState(btnInput);
-    });
-
-    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty()) return;
-        const bool correct = isAnswerAccepted(m_answerInputRaw);
-        showResultPopup(correct);
-        if (!correct) {
-            m_answerInputRaw.clear();
-            answerDisplay->setText(QStringLiteral("-"));
-            btnSubmit->setEnabled(false);
-        }
+        showResultPopup(true);
     });
 
     auto *actionRow = new QHBoxLayout();
     actionRow->setContentsMargins(0, 0, 0, 0);
     actionRow->setSpacing(12);
     actionRow->addStretch();
-    actionRow->addWidget(btnInput);
+    actionRow->addWidget(btnCapture);
     actionRow->addWidget(btnSubmit);
     actionRow->addStretch();
     rightLayout->addLayout(actionRow);
@@ -1796,8 +1855,8 @@ void MissionPage::setupMission4()
     auto *problemPage = new QWidget(this);
     problemPage->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
     auto *problemLayout = new QVBoxLayout(problemPage);
-    problemLayout->setContentsMargins(12, 6, 12, 6);
-    problemLayout->setSpacing(6);
+    problemLayout->setContentsMargins(10, 4, 10, 4);
+    problemLayout->setSpacing(4);
 
     auto *problemHeader = new QLabel(QStringLiteral("[MISSION] 4단계 인증: 서버 온도 안정화"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
@@ -1810,18 +1869,18 @@ void MissionPage::setupMission4()
     divider->setFrameShape(QFrame::HLine);
     divider->setStyleSheet(QStringLiteral("background-color: #00ff41; max-height: 1px; border: none;"));
     problemLayout->addWidget(divider);
-    problemLayout->addSpacing(4);
+    problemLayout->addSpacing(2);
 
     auto *bodyRow = new QHBoxLayout();
     bodyRow->setContentsMargins(0, 0, 0, 0);
-    bodyRow->setSpacing(12);
+    bodyRow->setSpacing(10);
 
     auto *leftPanel = new QWidget(problemPage);
     leftPanel->setStyleSheet(QStringLiteral(
         "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
     auto *leftLayout = new QVBoxLayout(leftPanel);
-    leftLayout->setContentsMargins(16, 14, 16, 14);
-    leftLayout->setSpacing(0);
+    leftLayout->setContentsMargins(12, 10, 12, 10);
+    leftLayout->setSpacing(8);
 
     leftLayout->addStretch();
 
@@ -1851,9 +1910,8 @@ void MissionPage::setupMission4()
         });
     });
 
-    leftLayout->addSpacing(20);
     leftLayout->addWidget(btnPlay, 0, Qt::AlignCenter);
-    leftLayout->addSpacing(14);
+    leftLayout->addStretch();
 
     bodyRow->addWidget(leftPanel, 1);
 
@@ -1861,8 +1919,8 @@ void MissionPage::setupMission4()
     rightPanel->setStyleSheet(QStringLiteral(
         "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
     auto *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(16, 14, 16, 14);
-    rightLayout->setSpacing(12);
+    rightLayout->setContentsMargins(12, 10, 12, 10);
+    rightLayout->setSpacing(8);
     rightLayout->setAlignment(Qt::AlignHCenter);
 
     rightLayout->addStretch();
@@ -1882,7 +1940,7 @@ void MissionPage::setupMission4()
         "color: #00ff41; font-size: 28px; font-weight: 800; "
         "font-family: 'Consolas', monospace; background: transparent; border: none;"));
     rightLayout->addWidget(answerDisplay);
-    rightLayout->addSpacing(16);
+    rightLayout->addSpacing(10);
 
     auto *btnInput = new QPushButton(QStringLiteral("\u25b6 INPUT"), rightPanel);
     btnInput->setCursor(Qt::PointingHandCursor);
@@ -1907,7 +1965,7 @@ void MissionPage::setupMission4()
     btnSubmit->setFocusPolicy(Qt::NoFocus);
     btnSubmit->setAutoRepeat(false);
     btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(false);
+    btnSubmit->setEnabled(s_operatorMode);
     btnSubmit->setStyleSheet(QStringLiteral(
         "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
         "border-radius: 6px; font-size: 18px; font-weight: 800; "
@@ -1939,7 +1997,7 @@ void MissionPage::setupMission4()
     });
 
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty()) return;
+        if (m_answerInputRaw.isEmpty() && !s_operatorMode) return;
         const bool correct = isAnswerAccepted(m_answerInputRaw);
         showResultPopup(correct);
         if (!correct) {
@@ -2084,7 +2142,7 @@ void MissionPage::setupMission5()
     btnSubmit->setFocusPolicy(Qt::NoFocus);
     btnSubmit->setAutoRepeat(false);
     btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(false);
+    btnSubmit->setEnabled(s_operatorMode);
     btnSubmit->setStyleSheet(QStringLiteral(
         "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
         "border-radius: 6px; font-size: 18px; font-weight: 800; "
@@ -2115,14 +2173,8 @@ void MissionPage::setupMission5()
         resetButtonHoverState(btnInput);
     });
 
-    auto *inputBtnRow = new QHBoxLayout();
-    inputBtnRow->addStretch();
-    inputBtnRow->addWidget(btnInput);
-    inputBtnRow->addStretch();
-    rightLayout->addLayout(inputBtnRow);
-
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
-        if (m_answerInputRaw.isEmpty()) return;
+        if (m_answerInputRaw.isEmpty() && !s_operatorMode) return;
         const bool correct = isAnswerAccepted(m_answerInputRaw);
         showResultPopup(correct);
         if (!correct) {
@@ -2132,11 +2184,14 @@ void MissionPage::setupMission5()
         }
     });
 
-    auto *submitRow = new QHBoxLayout();
-    submitRow->addStretch();
-    submitRow->addWidget(btnSubmit);
-    submitRow->addStretch();
-    rightLayout->addLayout(submitRow);
+    auto *actionRow = new QHBoxLayout();
+    actionRow->setContentsMargins(0, 0, 0, 0);
+    actionRow->setSpacing(12);
+    actionRow->addStretch();
+    actionRow->addWidget(btnInput);
+    actionRow->addWidget(btnSubmit);
+    actionRow->addStretch();
+    rightLayout->addLayout(actionRow);
 
     rightLayout->addStretch();
 

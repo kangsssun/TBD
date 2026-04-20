@@ -20,6 +20,8 @@ class MissionPage : public QWidget
 public:
     explicit MissionPage(int missionNumber, QWidget *parent = nullptr);
     ~MissionPage() override;
+    static void setOperatorMode(bool enabled);
+    static bool isOperatorMode();
 
     int missionNumber() const { return m_missionNumber; }
 
@@ -63,6 +65,7 @@ private:
     void evaluateMission3CameraPreview();
     bool hasBlockingPopupOpen() const;
     QString buildMission3CapturePath() const;
+    void syncOperatorModeUi();
 
     int m_missionNumber;
     QVBoxLayout *m_contentLayout;
@@ -80,6 +83,9 @@ private:
     bool m_mission3StoryPopupDismissed;
     bool m_mission3CaptureInProgress;
     bool m_mission3PendingStop;
+    QString m_mission3CapturedImagePath;
+
+    static bool s_operatorMode;
 };
 
 #endif // MISSIONPAGE_H
