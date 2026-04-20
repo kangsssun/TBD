@@ -36,6 +36,7 @@ GameNode::GameNode(QWidget *parent)
     , m_ignoreTitleTap(false)
     , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
+    , m_operatorMode(false)
     , m_teamId(1)
     , m_serverIp(QStringLiteral("192.168.10.10"))
     , m_serverPort(5000)
@@ -711,12 +712,20 @@ void GameNode::onStartClicked()
     if (accepted) {
         stopTitleMusic();
         m_teamName = teamName.isEmpty() ? QStringLiteral("TEAM 1") : teamName;
+        m_operatorMode = (m_teamName.trimmed() == QStringLiteral("9999"));
+        MissionPage::setOperatorMode(m_operatorMode);
         m_readyPage->setTeamName(m_teamName);
 
         // 팀명이 정해졌으므로 서버에 다시 등록하여 GM에 팀명 전달
         registerWithServer();
 
-        if (m_introPageIndex >= 0 && m_introPageIndex < ui->stackedWidget->count()) {
+        if (m_operatorMode && m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
+            m_readyPage->resetCountdown(43 * 60 + 18);
+            ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
+            if (m_readyPage->currentMission()) {
+                m_readyPage->currentMission()->startMission();
+            }
+        } else if (m_introPageIndex >= 0 && m_introPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_introPageIndex);
         } else if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
             m_readyPage->resetCountdown(43 * 60 + 18);
