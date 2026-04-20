@@ -1,4 +1,4 @@
-QT       += core gui network
+QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -15,10 +15,12 @@ unix {
 
     SOURCES += dd_api/led_api.c \ 
                dd_api/camera_api.c \
-               dd_api/buzzer_api.c
+               dd_api/buzzer_api.c \
+               dd_api/zyro_api.c
     HEADERS += dd_api/led_api.h \ 
                dd_api/camera_api.h \
-               dd_api/buzzer_api.h
+               dd_api/buzzer_api.h \
+               dd_api/zyro_api.h
 }
 
 # You can make your code fail to compile if it uses deprecated APIs.
@@ -30,7 +32,6 @@ INCLUDEPATH += $$PWD
 SOURCES += \
     main.cpp \
     game_node.cpp \
-    keyboard/keyboardpanel.cpp \
     title/teamnamedialog.cpp \
     intro/emergencypage.cpp \
     game/readypage.cpp \
@@ -40,7 +41,6 @@ SOURCES += \
 
 HEADERS += \
     game_node.h \
-    keyboard/keyboardpanel.h \
     title/teamnamedialog.h \
     intro/emergencypage.h \
     game/readypage.h \
@@ -55,7 +55,8 @@ RESOURCES += \
     resources.qrc
 
 LIBS += \
-    -ljpeg
+    -ljpeg \
+    -lpthread
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
