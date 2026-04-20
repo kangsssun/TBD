@@ -40,7 +40,7 @@ DISTNAME      = game_node1.0.0
 DISTDIR = /media/sf_TBD/build-game_node-qt_embedded-Debug/.tmp/game_node1.0.0
 LINK          = /home/user/work/buildroot-2024.02.1/output/host/bin/aarch64-linux-gnu-g++
 LFLAGS        = --sysroot=/home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot
-LIBS          = $(SUBLIBS) -latomic /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Widgets.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Gui.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Network.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Core.so -lpthread  -lrt -lpthread -ldl 
+LIBS          = $(SUBLIBS) -latomic -ljpeg /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Widgets.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Gui.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Network.so /home/user/work/buildroot-2024.02.1/output/host/aarch64-buildroot-linux-gnu/sysroot/usr/lib/libQt5Core.so -lpthread  -lrt -lpthread -ldl 
 AR            = /home/user/work/buildroot-2024.02.1/output/host/bin/aarch64-linux-gnu-ar cqs
 RANLIB        = 
 SED           = sed
@@ -53,6 +53,8 @@ OBJECTS_DIR   = ./
 ####### Files
 
 SOURCES       = ../game_node/dd_api/led_api.c \
+		../game_node/dd_api/camera_api.c \
+		../game_node/dd_api/buzzer_api.c \
 		../game_node/main.cpp \
 		../game_node/game_node.cpp \
 		../game_node/keyboard/keyboardpanel.cpp \
@@ -67,6 +69,8 @@ SOURCES       = ../game_node/dd_api/led_api.c \
 		moc_readypage.cpp \
 		moc_missionpage.cpp
 OBJECTS       = led_api.o \
+		camera_api.o \
+		buzzer_api.o \
 		main.o \
 		game_node.o \
 		keyboardpanel.o \
@@ -149,6 +153,8 @@ DIST          = /home/user/work/buildroot-2024.02.1/output/host/mkspecs/features
 		/home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/yacc.prf \
 		/home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/lex.prf \
 		../game_node/game_node.pro ../game_node/dd_api/led_api.h \
+		../game_node/dd_api/camera_api.h \
+		../game_node/dd_api/buzzer_api.h \
 		../game_node/game_node.h \
 		../game_node/keyboard/keyboardpanel.h \
 		../game_node/title/teamnamedialog.h \
@@ -157,6 +163,8 @@ DIST          = /home/user/work/buildroot-2024.02.1/output/host/mkspecs/features
 		../game_node/game/missionpage.h \
 		../game_node/chat/contactgmdialog.h \
 		../game_node/notice/noticedialog.h ../game_node/dd_api/led_api.c \
+		../game_node/dd_api/camera_api.c \
+		../game_node/dd_api/buzzer_api.c \
 		../game_node/main.cpp \
 		../game_node/game_node.cpp \
 		../game_node/keyboard/keyboardpanel.cpp \
@@ -332,8 +340,8 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents ../game_node/resources.qrc $(DISTDIR)/
 	$(COPY_FILE) --parents /home/user/work/buildroot-2024.02.1/output/host/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents ../game_node/dd_api/led_api.h ../game_node/game_node.h ../game_node/keyboard/keyboardpanel.h ../game_node/title/teamnamedialog.h ../game_node/intro/emergencypage.h ../game_node/game/readypage.h ../game_node/game/missionpage.h ../game_node/chat/contactgmdialog.h ../game_node/notice/noticedialog.h $(DISTDIR)/
-	$(COPY_FILE) --parents ../game_node/dd_api/led_api.c ../game_node/main.cpp ../game_node/game_node.cpp ../game_node/keyboard/keyboardpanel.cpp ../game_node/title/teamnamedialog.cpp ../game_node/intro/emergencypage.cpp ../game_node/game/readypage.cpp ../game_node/game/missionpage.cpp ../game_node/chat/contactgmdialog.cpp ../game_node/notice/noticedialog.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents ../game_node/dd_api/led_api.h ../game_node/dd_api/camera_api.h ../game_node/dd_api/buzzer_api.h ../game_node/game_node.h ../game_node/keyboard/keyboardpanel.h ../game_node/title/teamnamedialog.h ../game_node/intro/emergencypage.h ../game_node/game/readypage.h ../game_node/game/missionpage.h ../game_node/chat/contactgmdialog.h ../game_node/notice/noticedialog.h $(DISTDIR)/
+	$(COPY_FILE) --parents ../game_node/dd_api/led_api.c ../game_node/dd_api/camera_api.c ../game_node/dd_api/buzzer_api.c ../game_node/main.cpp ../game_node/game_node.cpp ../game_node/keyboard/keyboardpanel.cpp ../game_node/title/teamnamedialog.cpp ../game_node/intro/emergencypage.cpp ../game_node/game/readypage.cpp ../game_node/game/missionpage.cpp ../game_node/chat/contactgmdialog.cpp ../game_node/notice/noticedialog.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents ../game_node/game_node.ui $(DISTDIR)/
 
 
@@ -363,8 +371,13 @@ compiler_rcc_clean:
 	-$(DEL_FILE) qrc_resources.cpp
 qrc_resources.cpp: ../game_node/resources.qrc \
 		/home/user/work/buildroot-2024.02.1/output/host/bin/rcc \
+		../game_node/images/mission3_complete.png \
+		../game_node/images/misson_1.png \
 		../game_node/images/mission1_complete.png \
+		../game_node/images/mission4_complete.png \
+		../game_node/images/mission_2.png \
 		../game_node/images/mission2_complete.png \
+		../game_node/images/mission5_complete.png \
 		../game_node/images/title.png \
 		../game_node/fonts/NotoSansKR-Regular.ttf
 	/home/user/work/buildroot-2024.02.1/output/host/bin/rcc -name resources ../game_node/resources.qrc -o qrc_resources.cpp
@@ -423,6 +436,13 @@ led_api.o: ../game_node/dd_api/led_api.c ../game_node/dd_api/led_api.h \
 		../game_node/dd_api/led_ioctl.h
 	$(CC) -c $(CFLAGS) $(INCPATH) -o led_api.o ../game_node/dd_api/led_api.c
 
+camera_api.o: ../game_node/dd_api/camera_api.c ../game_node/dd_api/camera_api.h
+	$(CC) -c $(CFLAGS) $(INCPATH) -o camera_api.o ../game_node/dd_api/camera_api.c
+
+buzzer_api.o: ../game_node/dd_api/buzzer_api.c ../game_node/dd_api/buzzer_api.h \
+		../game_node/dd_api/buzzer_ioctl.h
+	$(CC) -c $(CFLAGS) $(INCPATH) -o buzzer_api.o ../game_node/dd_api/buzzer_api.c
+
 main.o: ../game_node/main.cpp ../game_node/game_node.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o ../game_node/main.cpp
 
@@ -453,7 +473,10 @@ readypage.o: ../game_node/game/readypage.cpp ../game_node/game/readypage.h \
 missionpage.o: ../game_node/game/missionpage.cpp ../game_node/game/missionpage.h \
 		../game_node/title/teamnamedialog.h \
 		../game_node/dd_api/led_api.h \
-		../game_node/dd_api/led_ioctl.h
+		../game_node/dd_api/led_ioctl.h \
+		../game_node/dd_api/buzzer_api.h \
+		../game_node/dd_api/buzzer_ioctl.h \
+		../game_node/dd_api/camera_api.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o missionpage.o ../game_node/game/missionpage.cpp
 
 contactgmdialog.o: ../game_node/chat/contactgmdialog.cpp ../game_node/chat/contactgmdialog.h

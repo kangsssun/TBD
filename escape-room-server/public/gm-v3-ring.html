@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[V3] 보안관제 + 스텝 (2열 카드 + 원형 프로그레스)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+        * { box-sizing: border-box; }
+        body { font-family: 'Share Tech Mono', 'Courier New', monospace; background: #0a0a0a; color: #00ff41; margin: 0; overflow-x: hidden; }
+        body::after { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,65,0.03) 2px,rgba(0,255,65,0.03) 4px); pointer-events:none; z-index:9999; }
+        .header-bar { background:linear-gradient(180deg,#1a0000 0%,#0a0a0a 100%); border-bottom:2px solid #ff0000; box-shadow:0 2px 20px rgba(255,0,0,0.3); }
+        .timer-display { font-family:'Orbitron',sans-serif; font-size:4rem; color:#ff0000; text-shadow:0 0 20px rgba(255,0,0,0.8),0 0 40px rgba(255,0,0,0.4); letter-spacing:0.1em; }
+        .timer-display.warning { animation:timer-blink 1s infinite; }
+        @keyframes timer-blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+        .status-label { font-family:'Orbitron',sans-serif; font-size:0.65rem; letter-spacing:0.3em; text-transform:uppercase; }
+        .rec-dot { width:10px; height:10px; border-radius:50%; background:#ff0000; animation:rec-blink 1.5s infinite; }
+        @keyframes rec-blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+        .alert-banner { background:linear-gradient(90deg,#1a0000,#330000,#1a0000); border:1px solid #ff0000; animation:alert-glow 2s infinite; }
+        @keyframes alert-glow { 0%,100%{box-shadow:0 0 10px rgba(255,0,0,0.3);} 50%{box-shadow:0 0 25px rgba(255,0,0,0.6);} }
+        .grid-overlay { position:fixed; inset:0; pointer-events:none; z-index:1; background-image:linear-gradient(rgba(255,0,0,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,0,0,0.03) 1px,transparent 1px); background-size:50px 50px; }
+        .btn-danger { background:#cc0000; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; font-family:'Orbitron',sans-serif; font-size:0.7rem; letter-spacing:0.1em; transition:all 0.2s; }
+        .btn-danger:hover { background:#ff0000; box-shadow:0 0 15px rgba(255,0,0,0.5); }
+        .btn-primary { background:#0066cc; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; font-family:'Share Tech Mono',monospace; font-size:0.8rem; transition:all 0.2s; }
+        .btn-primary:hover { background:#0088ff; }
+        .log-panel { background:#0a0a0a; border:1px solid #333; font-size:0.7rem; max-height:300px; overflow-y:auto; }
+        .log-panel::-webkit-scrollbar { width:4px; }
+        .log-panel::-webkit-scrollbar-thumb { background:#ff0000; border-radius:2px; }
+        .log-entry { padding:3px 8px; border-bottom:1px solid #1a1a1a; }
+
+        /* 팀 카드 - 2열, 큰 카드 + 원형 프로그레스 결합 */
+        .team-card {
+            background: #111; border: 1px solid #333; border-radius: 10px; transition: all 0.3s;
+            position: relative; overflow: hidden; padding: 20px;
+        }
+        .team-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#ff0000,#ff6600,#ffcc00); }
+        .team-card:hover { border-color:#ff0000; box-shadow:0 0 20px rgba(255,0,0,0.2); }
+        .team-card.cleared { border-color:#00ff41; }
+        .team-card.cleared::before { background:#00ff41; }
+        .team-card.offline { opacity:0.35; }
+
+        /* 원형 프로그레스 */
+        .progress-ring { width:90px; height:90px; flex-shrink:0; }
+        .progress-ring circle { fill:none; stroke-width:6; stroke-linecap:round; }
+        .progress-ring .bg { stroke:#1a1a1a; }
+        .progress-ring .fg { transition:stroke-dashoffset 0.8s; transform:rotate(-90deg); transform-origin:center; }
+
+        /* 미션 스텝 */
+        .mission-step { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; transition:all 0.3s; flex-shrink:0; }
+        .step-done { background:#00ff41; color:#000; }
+        .step-current { background:#ff0000; color:#fff; animation:step-pulse 1.5s infinite; box-shadow:0 0 12px rgba(255,0,0,0.6); }
+        .step-pending { background:rgba(255,255,255,0.06); color:#444; border:1px solid #333; }
+        @keyframes step-pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.15);} }
+        .step-connector { height:2px; width:16px; flex-shrink:0; }
+        .step-connector.done { background:#00ff41; }
+        .step-connector.pending { background:#222; }
+
+        .mission-label { font-family:'Orbitron',sans-serif; font-size:0.6rem; letter-spacing:0.15em; padding:2px 8px; border-radius:3px; display:inline-block; }
+    </style>
+</head>
+<body>
+    <div class="grid-overlay"></div>
+
+    <header class="header-bar px-6 py-3 flex items-center justify-between relative z-10">
+        <div class="flex items-center gap-4">
+            <div class="rec-dot"></div>
+            <div>
+                <div class="status-label text-red-500">SECURITY SYSTEM v2.1</div>
+                <h1 class="text-xl font-bold text-white" style="font-family:'Orbitron',sans-serif; letter-spacing:0.15em;">GM MASTER CONTROL</h1>
+            </div>
+        </div>
+        <div class="flex items-center gap-8">
+            <div class="text-center"><div class="status-label text-gray-500 mb-1">NODES</div><div class="text-2xl text-white font-bold" style="font-family:'Orbitron',sans-serif;">3 / 8</div></div>
+            <div class="text-center"><div class="status-label text-gray-500 mb-1">AVG</div><div class="text-2xl text-yellow-400 font-bold" style="font-family:'Orbitron',sans-serif;">47%</div></div>
+            <div class="text-center"><div class="status-label text-gray-500 mb-1">REMAINING</div><div class="timer-display" id="main-timer">38:45</div></div>
+            <div class="flex flex-col gap-2">
+                <button class="btn-danger">▶ START</button>
+                <button class="btn-danger" style="background:#666">⏸ PAUSE</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="alert-banner mx-6 mt-4 p-3 rounded text-center relative z-10">
+        <span class="text-red-400 text-sm" style="font-family:'Orbitron',sans-serif; letter-spacing:0.15em;">⚠️ SYSTEM BREACH — 갓찌(🐹) 보안 장애 — 5단계 인증 복구 진행 중 ⚠️</span>
+    </div>
+
+    <main class="p-6 relative z-10">
+        <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-8">
+                <div class="flex items-center gap-2 mb-3"><div class="status-label text-gray-400">NODE STATUS MONITORING</div><div class="flex-1 h-px bg-gray-800"></div></div>
+                <div class="grid grid-cols-2 gap-4">
+
+                    <!-- T1 - Mission 2 -->
+                    <div class="team-card">
+                        <div class="flex gap-4 mb-4">
+                            <!-- 원형 프로그레스 -->
+                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                <circle class="bg" cx="18" cy="18" r="15.9"/>
+                                <circle class="fg" cx="18" cy="18" r="15.9" stroke="#ff0000" stroke-dasharray="100" stroke-dashoffset="65"/>
+                            </svg>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                                    <span class="text-white font-bold">T1 갓찌토벌대</span>
+                                </div>
+                                <div class="text-gray-500 text-[10px] mb-2">Connected · 12m</div>
+                                <div class="flex items-center gap-2">
+                                    <span class="mission-label" style="background:rgba(255,0,0,0.15); color:#ff4444; border:1px solid #ff4444;">● MISSION 2</span>
+                                    <span class="text-xl text-white font-bold" style="font-family:'Orbitron',sans-serif;">35%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 미션 스텝 인디케이터 -->
+                        <div class="flex items-center justify-center gap-0 mb-3 py-2 rounded" style="background:rgba(255,255,255,0.02);">
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-current">2</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">3</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">4</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">5</div>
+                        </div>
+                        <button class="w-full text-[11px] py-2 border border-gray-700 rounded text-gray-400 hover:text-white hover:border-red-500 transition">🏁 퇴실 인증</button>
+                    </div>
+
+                    <!-- T2 CLEARED -->
+                    <div class="team-card cleared">
+                        <div class="flex gap-4 mb-4">
+                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                <circle class="bg" cx="18" cy="18" r="15.9"/>
+                                <circle class="fg" cx="18" cy="18" r="15.9" stroke="#00ff41" stroke-dasharray="100" stroke-dashoffset="0"/>
+                            </svg>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                                    <span class="text-white font-bold">T2 해바라기씨수호대</span>
+                                </div>
+                                <div class="text-green-400 text-[10px] mb-2">✅ CLEARED · 32:15</div>
+                                <div class="flex items-center gap-2">
+                                    <span class="mission-label" style="background:rgba(0,255,65,0.1); color:#00ff41; border:1px solid #00ff41;">✓ ALL CLEAR</span>
+                                    <span class="text-xl text-green-400 font-bold" style="font-family:'Orbitron',sans-serif;">100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-center gap-0 mb-3 py-2 rounded" style="background:rgba(0,255,65,0.03);">
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div>
+                        </div>
+                        <div class="text-center text-[11px] text-green-400 border border-green-800 rounded py-2">🏆 1등 클리어</div>
+                    </div>
+
+                    <!-- T3 - Mission 4 -->
+                    <div class="team-card">
+                        <div class="flex gap-4 mb-4">
+                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                <circle class="bg" cx="18" cy="18" r="15.9"/>
+                                <circle class="fg" cx="18" cy="18" r="15.9" stroke="#22d3ee" stroke-dasharray="100" stroke-dashoffset="28"/>
+                            </svg>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                                    <span class="text-white font-bold">T3 럭키금성</span>
+                                </div>
+                                <div class="text-gray-500 text-[10px] mb-2">Connected · 8m</div>
+                                <div class="flex items-center gap-2">
+                                    <span class="mission-label" style="background:rgba(34,211,238,0.1); color:#22d3ee; border:1px solid #22d3ee;">● MISSION 4</span>
+                                    <span class="text-xl text-white font-bold" style="font-family:'Orbitron',sans-serif;">72%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-center gap-0 mb-3 py-2 rounded" style="background:rgba(255,255,255,0.02);">
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-done">✓</div><div class="step-connector done"></div>
+                            <div class="mission-step step-current">4</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">5</div>
+                        </div>
+                        <button class="w-full text-[11px] py-2 border border-gray-700 rounded text-gray-400 hover:text-white hover:border-red-500 transition">🏁 퇴실 인증</button>
+                    </div>
+
+                    <!-- T4 offline -->
+                    <div class="team-card offline">
+                        <div class="flex gap-4 mb-4">
+                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                <circle class="bg" cx="18" cy="18" r="15.9"/>
+                                <circle class="fg" cx="18" cy="18" r="15.9" stroke="#333" stroke-dasharray="100" stroke-dashoffset="100"/>
+                            </svg>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-gray-700"></div>
+                                    <span class="text-gray-600 font-bold">T4 대기 중</span>
+                                </div>
+                                <div class="text-gray-700 text-[10px] mb-2">Disconnected</div>
+                                <div class="text-gray-600 text-sm" style="font-family:'Orbitron',sans-serif;">0%</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-center gap-0 mb-3 py-2 rounded" style="background:rgba(255,255,255,0.01);">
+                            <div class="mission-step step-pending">1</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">2</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">3</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">4</div><div class="step-connector pending"></div>
+                            <div class="mission-step step-pending">5</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 클리어 순위 -->
+                <div class="mt-4 p-4 rounded" style="background:#0d0d0d; border:1px solid #222;">
+                    <div class="status-label text-gray-400 mb-3">🏆 CLEAR RANKING</div>
+                    <div class="flex gap-6 text-sm">
+                        <div class="flex items-center gap-2"><span class="text-yellow-400 text-lg">🥇</span><span class="text-white">T2 해바라기씨수호대</span><span class="text-gray-500">32:15</span></div>
+                        <div class="flex items-center gap-2 text-gray-600"><span class="text-lg">🥈</span><span>---</span></div>
+                        <div class="flex items-center gap-2 text-gray-600"><span class="text-lg">🥉</span><span>---</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 우측 -->
+            <div class="col-span-4 flex flex-col gap-4">
+                <div>
+                    <div class="flex items-center gap-2 mb-3"><div class="status-label text-gray-400">COMMUNICATION LOG</div><div class="flex-1 h-px bg-gray-800"></div></div>
+                    <div class="log-panel rounded p-2">
+                        <div class="log-entry text-yellow-500">[18:00:00] [SYS] 보안 시스템 초기화</div>
+                        <div class="log-entry text-yellow-500">[18:00:01] [SYS] ⚠️ 비콘 장애 — 갓찌🐹</div>
+                        <div class="log-entry text-green-400">[18:00:15] [T1] 연결됨</div>
+                        <div class="log-entry text-green-400">[18:00:18] [T2] 연결됨</div>
+                        <div class="log-entry text-green-400">[18:00:22] [T3] 연결됨</div>
+                        <div class="log-entry text-blue-400">[18:01:00] [GM→ALL] 게임 시작</div>
+                        <div class="log-entry text-cyan-400">[18:04:35] [T1] ✅ M1 클리어</div>
+                        <div class="log-entry text-red-400">[18:06:30] [T1] ❌ M2 실패</div>
+                        <div class="log-entry text-cyan-400">[18:09:13] [T2] ✅ M2 클리어</div>
+                        <div class="log-entry text-yellow-400">[18:10:00] [EVENT] ⚡ 바이러스!</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 mb-3"><div class="status-label text-gray-400">GM BROADCAST</div><div class="flex-1 h-px bg-gray-800"></div></div>
+                    <div class="flex gap-2">
+                        <select class="bg-black border border-gray-700 text-gray-300 px-2 py-1 rounded text-xs"><option>ALL</option><option>T1</option><option>T2</option><option>T3</option></select>
+                        <input type="text" class="flex-1 bg-black border border-gray-700 text-white px-3 py-1 rounded text-xs focus:outline-none focus:border-red-500" placeholder="메시지...">
+                        <button class="btn-primary text-xs px-3">SEND</button>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 mb-3"><div class="status-label text-gray-400">QUICK ACTIONS</div><div class="flex-1 h-px bg-gray-800"></div></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="btn-primary text-xs py-2">🔊 기준음</button>
+                        <button class="btn-danger text-xs py-2">⚠️ 전체정지</button>
+                        <button class="btn-primary text-xs py-2">📢 이벤트</button>
+                        <button class="btn-primary text-xs py-2" style="background:#7c3aed">🏁 퇴실승인</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        let seconds = 38*60+45;
+        setInterval(()=>{seconds--;if(seconds<0)seconds=0;const m=Math.floor(seconds/60).toString().padStart(2,'0');const s=(seconds%60).toString().padStart(2,'0');document.getElementById('main-timer').innerText=`${m}:${s}`;if(seconds<5*60)document.getElementById('main-timer').classList.add('warning');},1000);
+    </script>
+</body>
+</html>

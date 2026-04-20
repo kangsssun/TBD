@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GM MASTER CONTROL - Escape Room Sim</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background-color: #0f172a; color: #10b981; }
+        .cyber-panel { border: 1px solid #10b981; background-color: rgba(16, 185, 129, 0.05); }
+        .log-box { max-height: 250px; overflow-y: auto; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 3px; }
+        .color-green { color: #10b981; }
+    </style>
+</head>
+<body class="p-6 flex flex-col gap-8 min-h-screen relative" onload="initGmDashboard()">
+
+    <section class="cyber-panel p-6 rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+        <div class="flex justify-between items-center mb-6 border-b border-green-700 pb-4">
+            <h1 class="text-3xl font-bold tracking-widest text-white">GM MASTER CONTROL (Server)</h1>
+            <div class="flex items-center gap-6">
+                <div class="text-white text-lg">평균 진행도: <span id="gm-avg-progress" class="text-green-400 font-bold">0%</span></div>
+                <div id="gm-timer" class="text-5xl font-bold text-red-500">45:00</div>
+                <div class="flex gap-3">
+                    <button onclick="startTimer()" class="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600 font-bold">START</button>
+                    <button onclick="pauseTimer()" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-500 font-bold">PAUSE</button>
+                    <button onclick="resetTimer()" class="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-600 font-bold">RESET</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="col-span-2 border border-green-800 p-5 rounded bg-black">
+                <h2 class="text-xl text-white mb-4 font-bold border-b border-green-800 pb-2">NODE STATUS (Connected Teams)</h2>
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="text-green-400 border-b-2 border-green-800">
+                            <th class="py-3">TEAM ID / NAME</th>
+                            <th class="py-3">CURRENT MISSION</th>
+                            <th class="py-2 w-1/3">PROGRESS & APPROVAL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gm-table-body">
+                        </tbody>
+                </table>
+                
+                <div class="mt-6 border-t border-green-800 pt-4">
+                    <h3 class="text-lg text-yellow-400 font-bold mb-3">GM CONTROL PANEL</h3>
+                    <div class="flex gap-4">
+                        <button onclick="playBaseMelody()" class="bg-indigo-700 text-white px-4 py-2 rounded hover:bg-indigo-600 font-bold text-sm">🔊 도레미파솔 기준음 재생 (미션2 지급용)</button>
+                        <button onclick="emergencyAllPause()" class="bg-red-800 text-white px-4 py-2 rounded hover:bg-red-700 font-bold text-sm flex items-center gap-2">⚠️ 전 노드 강제 일시정지</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border border-green-800 p-5 rounded flex flex-col gap-4 bg-black">
+                <h2 class="text-xl text-white border-b border-green-800 pb-2 font-bold">COMMUNICATION LOG</h2>
+                <div id="chat-log" class="log-box text-xs space-y-2 flex-1 bg-gray-900 p-3 rounded">
+                    <div class="text-gray-400">[SYSTEM] 다중 통신 모듈 초기화 완료 (NFSroot)</div>
+                </div>
+                <div class="flex gap-3 mt-3 border-t border-green-800 pt-3">
+                    <select id="msg-target" class="bg-gray-800 border border-green-700 p-2 text-white rounded focus:outline-none text-sm w-1/3">
+                        <option value="ALL">전체 공지</option>
+                        </select>
+                    <input type="text" id="gm-msg-input" class="flex-1 bg-gray-800 border border-green-700 p-2 text-green-400 rounded focus:outline-none text-sm" placeholder="메시지 입력">
+                    <button onclick="sendGmMessage()" class="bg-blue-700 text-white px-5 py-2 rounded hover:bg-blue-600 font-bold text-sm">SEND</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 퇴실 인증 모달 -->
+    <div id="final-auth-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+        <div class="bg-gray-900 border border-blue-600 p-6 rounded-lg w-full max-w-md shadow-[0_0_25px_rgba(37,99,235,0.4)]">
+            <h2 class="text-xl text-blue-400 font-bold mb-4" id="final-auth-title">퇴실 코드 승인</h2>
+            <div class="flex gap-2">
+                <input type="text" id="final-auth-input" class="flex-1 bg-black border border-gray-600 p-3 text-white rounded focus:outline-none text-sm" placeholder="이 팀이 제출한 퇴실 코드 입력">
+                <button onclick="verifyFinalCode()" class="bg-blue-700 text-white px-5 py-2 rounded hover:bg-blue-600 font-bold text-sm">승인</button>
+            </div>
+            <div class="mt-4 text-right">
+                <button onclick="closeFinalAuthModal()" class="text-gray-500 hover:text-white text-sm font-bold">닫기 (취소)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 통신 및 상태 관리 (서버 연동) ---
+        let gmSocket = null;
+        let activeNodes = {}; // { '1': { name: 'Team 1', mission: 1, progress: 0 } }
+        let chatLogs = [];
+
+        // --- GM 초기화 ---
+        function initGmDashboard() {
+            connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            const host = window.location.hostname || '127.0.0.1';
+            gmSocket = new WebSocket(`ws://${host}:8080`);
+
+            gmSocket.onopen = () => {
+                console.log("[SYSTEM] WebSocket 연결됨. GM 등록...");
+                addChatLog('SYSTEM', 'ALL', 'WebSocket 서버 연결 완료');
+                gmSocket.send(JSON.stringify({
+                    type: 'register',
+                    role: 'gm',
+                    team_id: null
+                }));
+            };
+
+            gmSocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleServerMessage(data);
+            };
+
+            gmSocket.onclose = () => {
+                addChatLog('SYSTEM', 'ALL', 'WebSocket 서버 연결 끊김. 재연결 대기 중...');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function handleServerMessage(data) {
+            if (data.type === 'init_state') {
+                // init_state에는 실제 등록된 팀만 들어있음
+                // active_nodes에서 팀명을 받으므로 여기서는 진행도만 업데이트
+                Object.keys(data.state).forEach(tid => {
+                    if(activeNodes[tid]) {
+                        activeNodes[tid].mission = data.state[tid].mission;
+                        activeNodes[tid].progress = data.state[tid].progress;
+                    }
+                });
+                renderGmTable();
+            }
+            else if (data.type === 'node_connected') {
+                const tid = data.team_id;
+                const tname = data.team_name || `Team ${tid}`;
+                if(!activeNodes[tid]) {
+                    activeNodes[tid] = { name: tname, mission: 1, progress: 0, status: 'connected' };
+                } else {
+                    activeNodes[tid].status = 'connected';
+                    if (data.team_name) activeNodes[tid].name = data.team_name;
+                }
+                addChatLog('SYSTEM', `T${tid}`, `노드 T${tid} (${activeNodes[tid].name}) 연결됨`);
+                renderGmTable();
+                updateTargetSelect();
+            }
+            else if (data.type === 'node_disconnected') {
+                const tid = data.team_id;
+                addChatLog('SYSTEM', `T${tid}`, `노드 T${tid} 연결 종료됨`);
+                // UI에서 지우진 않고 상태만 놔둠. (나갔는지 알 수 있게 처리 가능)
+                if(activeNodes[tid]) {
+                    activeNodes[tid].status = 'disconnected';
+                }
+                renderGmTable();
+            }
+            else if (data.type === 'update_progress') {
+                const tid = data.team_id;
+                if(activeNodes[tid]) {
+                    activeNodes[tid].mission = data.mission;
+                    activeNodes[tid].progress = data.progress;
+                    renderGmTable();
+                }
+            }
+            else if (data.type === 'chat_message') {
+                // GM이 보낸 메시지가 에코로 돌아온 경우 무시 (이미 로컬에서 추가함)
+                if (data.sender === 'gm') return;
+                const sender = `T${data.team_id}`;
+                const tname = activeNodes[data.team_id] ? activeNodes[data.team_id].name : `Team ${data.team_id}`;
+                addChatLog(sender + ' (' + tname + ')', 'GM', data.text);
+            }
+            else if (data.type === 'active_nodes') {
+                // 초기 접속 시 현재 연결된 노드 배열 [{team_id, team_name}, ...]
+                data.teams.forEach(t => {
+                    const tid = t.team_id;
+                    const tname = t.team_name || `Team ${tid}`;
+                    if(!activeNodes[tid]) {
+                        activeNodes[tid] = { name: tname, mission: 1, progress: 0, status: 'connected' };
+                    } else {
+                        activeNodes[tid].status = 'connected';
+                        if (t.team_name) activeNodes[tid].name = t.team_name;
+                    }
+                });
+                renderGmTable();
+                updateTargetSelect();
+            }
+            else if (data.type === 'timer_sync') {
+                gmTimerSeconds = data.timeRemaining;
+                gmTimerRunning = data.running;
+                updateGmTimerUI(gmTimerSeconds);
+            }
+        }
+
+        function getTimestamp() { return new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+
+        // --- UI 갱신 함수들 ---
+        function updateGmTimerUI(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            document.getElementById('gm-timer').innerText = `${m}:${s}`;
+        }
+
+        function renderGmTable() {
+            const tbody = document.getElementById('gm-table-body');
+            const teamIds = Object.keys(activeNodes);
+
+            if(teamIds.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-gray-500">접속된 노드가 없습니다.</td></tr>`;
+                updateAvgProgress();
+                return;
+            }
+
+            tbody.innerHTML = teamIds.map(tid => {
+                const t = activeNodes[tid];
+                const progress = t.progress || 0;
+                const statusColor = t.status === 'disconnected' ? 'text-gray-500' : 'text-white';
+                const statusText = t.status === 'disconnected' ? '(오프라인)' : '';
+
+                return `
+                <tr class="border-b border-green-900 hover:bg-gray-900 transition-colors">
+                    <td class="py-3 ${statusColor} font-bold">T${tid} - ${t.name} ${statusText}</td>     
+                    <td class="py-3 text-gray-300">Mission ${t.mission || 1}</td>
+                    <td class="py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-full bg-gray-700 rounded h-3 flex-1"><div class="bg-green-500 h-3 rounded transition-all" style="width: ${progress}%"></div></div>
+                            <span class="text-green-400 font-bold w-10">${progress}%</span>
+                            <button onclick="openFinalAuthModal('${tid}', '${t.name}')" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-gray-600 transition whitespace-nowrap">퇴실 인증</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+            
+            updateAvgProgress();
+        }
+
+        function updateTargetSelect() {
+            const select = document.getElementById('msg-target');
+            const teamIds = Object.keys(activeNodes).filter(tid => activeNodes[tid].status !== 'disconnected');
+
+            // 초기화
+            select.innerHTML = '<option value="ALL">전체 공지</option>';
+            teamIds.forEach(tid => {
+                const option = document.createElement('option');
+                option.value = tid; // 팀 ID를 value로 사용
+                option.innerText = `T${tid} - ${activeNodes[tid].name}`;
+                select.appendChild(option);
+            });
+        }
+
+        function updateAvgProgress() {
+            const teamIds = Object.keys(activeNodes).filter(tid => activeNodes[tid].status !== 'disconnected');
+            if(teamIds.length === 0) {
+                document.getElementById('gm-avg-progress').innerText = "0%";
+                return;
+            }
+            const totalProgress = teamIds.reduce((sum, tid) => sum + (activeNodes[tid].progress || 0), 0);
+            const avg = Math.round(totalProgress / teamIds.length);
+            document.getElementById('gm-avg-progress').innerText = `${avg}%`;
+        }
+
+        function addChatLog(sender, target, text) {
+            const chatLog = document.getElementById('chat-log');
+            const time = getTimestamp();
+            
+            let color = 'text-green-400';
+            if (sender === 'GM') color = 'text-blue-400';
+            else if (sender === 'SYSTEM') color = 'text-yellow-500';
+
+            let targetStr = target === 'ALL' ? '[ALL]' : `[${target}]`;
+            
+            chatLog.innerHTML += `<div class="${color}"><span class="text-gray-500 text-[10px]">[${time}]</span> [${sender} -> ${targetStr}] ${text}</div>`;
+            chatLog.scrollTop = chatLog.scrollHeight; // 자동 스크롤
+        }
+
+        // --- GM 액션 ---
+        function sendGmMessage() {
+            const target = document.getElementById('msg-target').value;
+            const text = document.getElementById('gm-msg-input').value.trim();        
+            if(!text || !gmSocket) return;
+
+            const msgObj = {
+                type: 'chat_message',
+                sender: 'gm',
+                target: target,
+                text: text
+            };
+
+            gmSocket.send(JSON.stringify(msgObj));
+            document.getElementById('gm-msg-input').value = "";
+            
+            // GM이 보낸 메시지는 화면에 직접 추가
+            const targetLabel = target === 'ALL' ? 'ALL' : `T${target}`;
+            addChatLog('GM', targetLabel, text);
+        }
+
+        function playBaseMelody() {
+            if (!gmSocket) return;
+            gmSocket.send(JSON.stringify({ type: 'chat_message', sender: 'gm', target: 'ALL', text: '🔊 기준 멜로디(도-레-미-파-솔)가 전송되었습니다. 스피커를 확인하세요.' }));
+            addChatLog('GM', 'ALL', '🔊 기준 멜로디 전송');
+        }
+
+        let activeAuthTeamId = null;
+
+        function openFinalAuthModal(teamId, teamName) {
+            activeAuthTeamId = teamId;
+            document.getElementById('final-auth-title').innerText = `[T${teamId} - ${teamName}] 퇴실 승인`;
+            document.getElementById('final-auth-input').value = "";
+            document.getElementById('final-auth-modal').classList.remove('hidden');
+        }
+
+        function closeFinalAuthModal() {
+            document.getElementById('final-auth-modal').classList.add('hidden');
+            activeAuthTeamId = null;
+        }
+
+        function verifyFinalCode() {
+            if(!activeAuthTeamId) return;
+            const inputEl = document.getElementById('final-auth-input');
+            const input = inputEl.value.trim();
+            if(!input) {
+                alert("코드를 입력해주세요.");
+                return;
+            }
+            
+            // GM이 입력받은 코드를 검증 (시나리오상 Node에서 생성된 코드를 가져와서 제출)
+            alert(`[팀 T${activeAuthTeamId}] 인증 코드 [ ${input} ] 검증 완료!\n해당 팀 퇴실 승인 처리됨.`);
+            closeFinalAuthModal();
+        }
+
+        function emergencyAllPause() {
+            pauseTimer();
+            addChatLog('SYSTEM', 'ALL', '전체 노드 강제 일시정지');
+        }
+
+        // --- 타이머 제어 (서버 연동) ---
+        let gmTimerSeconds = 45 * 60;
+        let gmTimerRunning = false;
+
+        function startTimer() {
+            if (!gmSocket || gmTimerRunning) return;
+            gmSocket.send(JSON.stringify({ type: 'timer_control', action: 'start' }));
+            addChatLog('SYSTEM', 'ALL', 'Main Timer Started.');
+        }
+
+        function pauseTimer() {
+            if (!gmSocket) return;
+            gmSocket.send(JSON.stringify({ type: 'timer_control', action: 'pause' }));
+            addChatLog('SYSTEM', 'ALL', 'Main Timer Paused.');
+        }
+
+        function resetTimer() {
+            if (!gmSocket) return;
+            gmSocket.send(JSON.stringify({ type: 'timer_control', action: 'reset' }));
+            gmTimerSeconds = 45 * 60;
+            updateGmTimerUI(gmTimerSeconds);
+            addChatLog('SYSTEM', 'ALL', 'Main Timer Reset.');
+        }
+    </script>
+</body>
+</html>

@@ -14,14 +14,19 @@ app.use(express.static('public'));
 let gameState = {};
 let timerState = { timeRemaining: 45 * 60, running: false };
 
+// IP 주소 기반 노드 상태 저장 (재연결 시 복원용)
+// key: IP주소, value: { team_id, team_name, mission, progress }
+const savedNodes = {};
+
 // 접속된 클라이언트(소켓)들을 관리하기 위한 Map (key: socket, value: 메타데이터)
 const clients = new Map();
 
-wss.on('connection', (ws) => {
-    console.log('[SYSTEM] 새로운 클라이언트 연결됨');
+wss.on('connection', (ws, req) => {
+    const clientIp = req.socket.remoteAddress || '';
+    console.log('[SYSTEM] 새로운 클라이언트 연결됨, IP:', clientIp);
     
     // 초기 메타데이터 (누군지 아직 모름)
-    clients.set(ws, { role: 'unknown', team_id: null });
+    clients.set(ws, { role: 'unknown', team_id: null, ip: clientIp });
 
     ws.on('message', (message) => {
         const data = JSON.parse(message);
@@ -36,10 +41,37 @@ wss.on('connection', (ws) => {
 
             // GM 커넥션에게 현재 활성 노드 목록 업데이트 방송
             if (data.role === 'node') {
-                if (data.team_id && !gameState[data.team_id]) {
-                    gameState[data.team_id] = { mission: 1, progress: 0 };
+                const nodeIp = clientInfo.ip;
+                // IP 기반 저장 데이터 확인 (재연결 복원)
+                if (nodeIp && savedNodes[nodeIp]) {
+                    // 팀명이 새로 전달되면 업데이트
+                    if (data.team_name) {
+                        savedNodes[nodeIp].team_name = data.team_name;
+                        clientInfo.team_name = data.team_name;
+                    }
+                    const saved = savedNodes[nodeIp];
+                    clientInfo.team_id = saved.team_id;
+                    clientInfo.team_name = saved.team_name;
+                    gameState[saved.team_id] = { mission: saved.mission, progress: saved.progress };
+                    console.log(`[RESTORE] IP ${nodeIp} → Team ${saved.team_id} (${saved.team_name}), M${saved.mission}, ${saved.progress}%`);
+                    // 노드에게 복원 데이터 전송
+                    ws.send(JSON.stringify({
+                        type: 'restore_state',
+                        team_id: saved.team_id,
+                        team_name: saved.team_name,
+                        mission: saved.mission,
+                        progress: saved.progress
+                    }));
+                } else {
+                    // 새 노드 — 저장
+                    if (data.team_id && !gameState[data.team_id]) {
+                        gameState[data.team_id] = { mission: 1, progress: 0 };
+                    }
+                    if (nodeIp && data.team_id) {
+                        savedNodes[nodeIp] = { team_id: data.team_id, team_name: data.team_name || null, mission: 1, progress: 0 };
+                    }
                 }
-                broadcastToRole('gm', { type: 'node_connected', team_id: data.team_id, team_name: data.team_name || null });
+                broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
             }
 
             // GM이 접속하면 현재까지의 상태를 한 번 보내줌
@@ -57,6 +89,11 @@ wss.on('connection', (ws) => {
         // B. 노드 상태 업데이트 수신
         if (data.type === 'update_progress' && clientInfo.role === 'node') {
             gameState[data.team_id] = { mission: data.mission, progress: data.progress };
+            // IP 기반 저장 업데이트
+            if (clientInfo.ip && savedNodes[clientInfo.ip]) {
+                savedNodes[clientInfo.ip].mission = data.mission;
+                savedNodes[clientInfo.ip].progress = data.progress;
+            }
             // 모든 접속자 중 GM에게만 해당 업데이트 내용을 브로드캐스트
             broadcastToRole('gm', data);
             // 모든 노드에게 평균 진행도 동기화
@@ -99,6 +136,26 @@ wss.on('connection', (ws) => {
             broadcastToRole('node', data);
             // GM에게도 현재 시간 동기화
             broadcastToRole('gm', { type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running });
+            return;
+        }
+
+        // F. GM이 특정 팀 리셋
+        if (data.type === 'force_reset_team' && clientInfo.role === 'gm') {
+            const targetTeamId = data.team_id;
+            console.log(`[RESET] GM이 팀 ${targetTeamId} 리셋 요청`);
+            // savedNodes에서 해당 팀의 IP 저장 데이터 삭제
+            for (const ip of Object.keys(savedNodes)) {
+                if (String(savedNodes[ip].team_id) === String(targetTeamId)) {
+                    delete savedNodes[ip];
+                    console.log(`[RESET] IP ${ip} 저장 데이터 삭제됨`);
+                }
+            }
+            // gameState에서도 삭제
+            delete gameState[targetTeamId];
+            // 해당 팀 노드에 force_reset 전송
+            sendToTeam(targetTeamId, { type: 'force_reset' });
+            // GM에 알림
+            broadcastToRole('gm', { type: 'node_disconnected', team_id: targetTeamId });
             return;
         }
     });
@@ -182,8 +239,9 @@ function sendToTeam(teamId, data) {
 // --- TCP 소켓 서버 (Qt C++ 내장 소켓용) ---
 const tcpClients = new Map();
 const tcpServer = net.createServer((socket) => {
-    console.log('[SYSTEM] 새로운 TCP 클라이언트 연결됨');
-    tcpClients.set(socket, { role: 'unknown', team_id: null });
+    const clientIp = socket.remoteAddress || '';
+    console.log('[SYSTEM] 새로운 TCP 클라이언트 연결됨, IP:', clientIp);
+    tcpClients.set(socket, { role: 'unknown', team_id: null, ip: clientIp });
 
     let buffer = '';
 
@@ -202,13 +260,38 @@ const tcpServer = net.createServer((socket) => {
                     clientInfo.role = msg.role;
                     clientInfo.team_id = msg.team_id;
                     clientInfo.team_name = msg.team_name || null;
-                    console.log(`[TCP REGISTER] Role: ${msg.role}, Team: ${msg.team_id}, Name: ${msg.team_name || '(미정)'}`);
+                    console.log(`[TCP REGISTER] Role: ${msg.role}, Team: ${msg.team_id}, Name: ${msg.team_name || '(미정)'}, IP: ${clientIp}`);
                     
                     if (msg.role === 'node') {
-                        if (msg.team_id && !gameState[msg.team_id]) {
-                            gameState[msg.team_id] = { mission: 1, progress: 0 };
+                        const nodeIp = clientInfo.ip;
+                        // IP 기반 저장 데이터 확인 (재연결 복원)
+                        if (nodeIp && savedNodes[nodeIp]) {
+                            // 팀명이 새로 전달되면 업데이트 (재등록 시)
+                            if (msg.team_name) {
+                                savedNodes[nodeIp].team_name = msg.team_name;
+                                clientInfo.team_name = msg.team_name;
+                            }
+                            const saved = savedNodes[nodeIp];
+                            clientInfo.team_id = saved.team_id;
+                            clientInfo.team_name = saved.team_name;
+                            gameState[saved.team_id] = { mission: saved.mission, progress: saved.progress };
+                            console.log(`[TCP RESTORE] IP ${nodeIp} → Team ${saved.team_id} (${saved.team_name}), M${saved.mission}, ${saved.progress}%`);
+                            socket.write(JSON.stringify({
+                                type: 'restore_state',
+                                team_id: saved.team_id,
+                                team_name: saved.team_name,
+                                mission: saved.mission,
+                                progress: saved.progress
+                            }) + '\n');
+                        } else {
+                            if (msg.team_id && !gameState[msg.team_id]) {
+                                gameState[msg.team_id] = { mission: 1, progress: 0 };
+                            }
+                            if (nodeIp && msg.team_id) {
+                                savedNodes[nodeIp] = { team_id: msg.team_id, team_name: msg.team_name || null, mission: 1, progress: 0 };
+                            }
                         }
-                        broadcastToRole('gm', { type: 'node_connected', team_id: msg.team_id, team_name: msg.team_name || null });
+                        broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
                         // 새로 연결된 노드에게 현재 타이머 동기화
                         socket.write(JSON.stringify({ type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running }) + '\n');
                     }
@@ -217,6 +300,10 @@ const tcpServer = net.createServer((socket) => {
 
                 if (msg.type === 'update_progress' && clientInfo.role === 'node') {
                     gameState[msg.team_id] = { mission: msg.mission, progress: msg.progress };
+                    if (clientInfo.ip && savedNodes[clientInfo.ip]) {
+                        savedNodes[clientInfo.ip].mission = msg.mission;
+                        savedNodes[clientInfo.ip].progress = msg.progress;
+                    }
                     broadcastToRole('gm', msg);
                     broadcastProgressSync();
                     continue;

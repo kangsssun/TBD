@@ -262,6 +262,45 @@ void GameNode::handleServerMessage(const QJsonObject &json)
             m_readyPage->setGlobalProgress(avgProgress);
         }
     }
+    else if (type == "restore_state") {
+        // 서버에 저장된 이전 상태 복원 (재연결 시)
+        int teamId = json["team_id"].toInt();
+        QString teamName = json["team_name"].toString();
+        int mission = json["mission"].toInt(1);
+        int progress = json["progress"].toInt(0);
+        qDebug() << "[SYSTEM] Restoring state: team=" << teamName << "mission=" << mission << "progress=" << progress;
+
+        m_teamId = teamId;
+        m_teamName = teamName;
+        stopTitleMusic();
+
+        if (m_readyPage) {
+            m_readyPage->setTeamName(m_teamName);
+            m_readyPage->restoreProgress(progress);
+            // 해당 미션 페이지로 복원
+            auto *restoredMission = new MissionPage(mission, m_readyPage);
+            m_readyPage->setMissionWidget(restoredMission);
+            restoredMission->startMission();
+        }
+
+        // 게임 화면으로 바로 이동
+        if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
+            ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
+        }
+    }
+    else if (type == "force_reset") {
+        // GM이 이 팀을 리셋 → 타이틀 화면으로 되돌리기
+        qDebug() << "[SYSTEM] Force reset received from GM";
+        m_teamName.clear();
+        m_teamId = 1;
+        if (m_readyPage) {
+            m_readyPage->setMissionProgress(0);
+            m_readyPage->setGlobalProgress(0);
+        }
+        // 타이틀 화면으로 이동
+        ui->stackedWidget->setCurrentIndex(0);
+        playTitleMusicIfNeeded();
+    }
 }
 
 void GameNode::showGmNotice(const QString &text)

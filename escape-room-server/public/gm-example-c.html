@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Version C] 레트로 CRT 터미널 - GM CONTROL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+        
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'VT323', monospace;
+            background: #000800;
+            color: #33ff33;
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.4;
+        }
+        
+        /* CRT 스캔라인 + 곡면 효과 */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0,0,0,0.15) 0px,
+                rgba(0,0,0,0.15) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            pointer-events: none; z-index: 9999;
+        }
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+            pointer-events: none; z-index: 9998;
+        }
+        
+        .crt-glow {
+            text-shadow: 0 0 5px #33ff33, 0 0 10px rgba(51,255,51,0.3);
+        }
+        
+        .terminal-box {
+            border: 2px solid #33ff33;
+            background: rgba(0,20,0,0.8);
+            box-shadow: 0 0 15px rgba(51,255,51,0.15), inset 0 0 30px rgba(0,0,0,0.5);
+        }
+        
+        .blink { animation: blink-anim 1s step-end infinite; }
+        @keyframes blink-anim { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        
+        .typewriter {
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 3px solid #33ff33;
+            animation: typing 2s steps(40) 1s forwards, blink-caret 0.75s step-end infinite;
+            width: 0;
+        }
+        @keyframes typing { from { width: 0; } to { width: 100%; } }
+        @keyframes blink-caret { 0%,100% { border-color: #33ff33; } 50% { border-color: transparent; } }
+        
+        .progress-ascii { font-family: 'VT323', monospace; letter-spacing: 2px; }
+        
+        .red { color: #ff3333; text-shadow: 0 0 5px #ff3333; }
+        .yellow { color: #ffff33; text-shadow: 0 0 5px #ffff33; }
+        .cyan { color: #33ffff; text-shadow: 0 0 5px #33ffff; }
+        .blue { color: #3399ff; text-shadow: 0 0 5px #3399ff; }
+        .dim { color: #336633; }
+        
+        .team-row { border-bottom: 1px solid #1a3a1a; padding: 8px 0; }
+        .team-row:hover { background: rgba(51,255,51,0.05); }
+        
+        input, select {
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            background: #001a00;
+            color: #33ff33;
+            border: 1px solid #33ff33;
+            padding: 6px 10px;
+            outline: none;
+        }
+        input:focus, select:focus { box-shadow: 0 0 8px rgba(51,255,51,0.4); }
+        
+        button {
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            background: #002200;
+            color: #33ff33;
+            border: 1px solid #33ff33;
+            padding: 6px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { background: #33ff33; color: #000; }
+        
+        .btn-red { color: #ff3333; border-color: #ff3333; }
+        .btn-red:hover { background: #ff3333; color: #000; }
+        
+        .log-area {
+            max-height: 250px; overflow-y: auto;
+            background: #000a00;
+            border: 1px solid #1a3a1a;
+            padding: 8px;
+        }
+        .log-area::-webkit-scrollbar { width: 8px; }
+        .log-area::-webkit-scrollbar-track { background: #000; }
+        .log-area::-webkit-scrollbar-thumb { background: #33ff33; }
+        
+        .ascii-art { font-family: 'VT323', monospace; line-height: 1.1; white-space: pre; }
+        
+        .big-timer {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 3.5rem;
+            color: #ff3333;
+            text-shadow: 0 0 20px rgba(255,51,51,0.6), 0 0 40px rgba(255,51,51,0.3);
+        }
+    </style>
+</head>
+<body class="p-4">
+    
+    <!-- ASCII 아트 헤더 -->
+    <div class="terminal-box p-4 mb-4">
+        <pre class="ascii-art crt-glow text-center" style="font-size:14px;">
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   ____  __  __    __  __    _    ____ _____ _____ ____                      ║
+║  / ___|M|  \/  |  |  \/  |  / \  / ___|_   _| ____|  _ \                   ║
+║ | |  _  | |\/| |  | |\/| | / _ \ \___ \ | | |  _| | |_) |                  ║
+║ | |_| | | |  | |  | |  | |/ ___ \ ___) || | | |___|  _ <                   ║
+║  \____| |_|  |_|  |_|  |_/_/   \_\____/ |_| |_____|_| \_\                  ║
+║                                                                             ║
+║          SECURITY SYSTEM v2.1 — ESCAPE ROOM CONTROL TERMINAL               ║
+║                    [ 갓찌(🐹) 보안 침해 대응 시스템 ]                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        </pre>
+    </div>
+    
+    <div class="grid grid-cols-12 gap-4">
+        
+        <!-- 좌측: 타이머 + 팀 상태 -->
+        <div class="col-span-8">
+            
+            <!-- 타이머 바 -->
+            <div class="terminal-box p-4 mb-4 flex items-center justify-between">
+                <div>
+                    <span class="dim">SYSTEM STATUS:</span> <span class="yellow">COMPROMISED</span>
+                    <br>
+                    <span class="dim">THREAT LEVEL:</span> <span class="red blink">■■■■■ CRITICAL</span>
+                    <br>
+                    <span class="dim">INTRUDER:</span> <span class="yellow">갓찌 🐹 (HAMSTER CLASS-S)</span>
+                </div>
+                <div class="text-center">
+                    <div class="dim" style="font-size:14px;">[ COUNTDOWN ]</div>
+                    <div class="big-timer" id="main-timer">38:45</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="alert('START')">[START]</button>
+                    <button onclick="alert('PAUSE')">[PAUSE]</button>
+                    <button class="btn-red" onclick="alert('RESET')">[RESET]</button>
+                </div>
+            </div>
+            
+            <!-- 팀 상태 테이블 -->
+            <div class="terminal-box p-4 mb-4">
+                <div class="crt-glow mb-3">
+                    ═══════════════════ [ NODE STATUS ] ═══════════════════
+                </div>
+                
+                <div class="dim mb-2" style="font-size:14px;">
+                    TEAM ID          │ MISSION │ PROGRESS                          │ STATUS
+                    ─────────────────┼─────────┼───────────────────────────────────┼──────────
+                </div>
+                
+                <div class="team-row">
+                    <span class="crt-glow"> T1 갓찌토벌대    </span>
+                    <span class="dim">│</span>
+                    <span class="yellow"> M2      </span>
+                    <span class="dim">│</span>
+                    <span class="progress-ascii"> [<span class="crt-glow">████████</span><span class="dim">░░░░░░░░░░░░</span>] 35% </span>
+                    <span class="dim">│</span>
+                    <span class="yellow"> ACTIVE</span>
+                </div>
+                
+                <div class="team-row">
+                    <span class="crt-glow"> T2 해바라기씨수호대</span>
+                    <span class="dim">│</span>
+                    <span style="color:#33ff33;"> DONE    </span>
+                    <span class="dim">│</span>
+                    <span class="progress-ascii"> [<span style="color:#33ff33;">████████████████████</span>] <span style="color:#33ff33;">100%</span></span>
+                    <span class="dim">│</span>
+                    <span style="color:#33ff33;"> ★ CLEAR (32:15)</span>
+                </div>
+                
+                <div class="team-row">
+                    <span class="crt-glow"> T3 럭키금성      </span>
+                    <span class="dim">│</span>
+                    <span class="cyan"> M4      </span>
+                    <span class="dim">│</span>
+                    <span class="progress-ascii"> [<span class="cyan">██████████████</span><span class="dim">░░░░░░</span>] 72% </span>
+                    <span class="dim">│</span>
+                    <span class="cyan"> ACTIVE</span>
+                </div>
+                
+                <div class="team-row">
+                    <span class="dim"> T4 (대기중)       │ ---     │ [░░░░░░░░░░░░░░░░░░░░]  0%  │ OFFLINE</span>
+                </div>
+                
+                <div class="dim mt-3" style="font-size:14px;">
+                    ─────────────────────────────────────────────────────────────────────────
+                    CONNECTED: 3/8  │  AVG PROGRESS: 47%  │  CLEARED: 1 team
+                </div>
+            </div>
+            
+            <!-- 클리어 순위 -->
+            <div class="terminal-box p-4">
+                <div class="yellow crt-glow mb-2">
+                    ═══════════ [ 🏆 CLEAR RANKING ] ═══════════
+                </div>
+                <div>
+                    <span class="yellow"> 1st </span> T2 해바라기씨수호대 ........... 32분 15초
+                </div>
+                <div class="dim">
+                     2nd  --- (대기 중)
+                </div>
+                <div class="dim">
+                     3rd  --- (대기 중)
+                </div>
+            </div>
+        </div>
+        
+        <!-- 우측: 로그 + 메시지 + 컨트롤 -->
+        <div class="col-span-4 flex flex-col gap-4">
+            
+            <!-- 통신 로그 -->
+            <div class="terminal-box p-4">
+                <div class="crt-glow mb-2">[ COMMUNICATION LOG ]</div>
+                <div class="log-area">
+                    <div class="yellow">[18:00:00] [SYS] 보안 시스템 초기화...</div>
+                    <div class="red">[18:00:01] [SYS] ⚠ 비콘 장애 감지</div>
+                    <div class="red">[18:00:01] [SYS] ⚠ 원인: 갓찌🐹 의한 물리적 파손</div>
+                    <div>[18:00:15] [T1] 노드 연결됨</div>
+                    <div>[18:00:18] [T2] 노드 연결됨</div>
+                    <div>[18:00:22] [T3] 노드 연결됨</div>
+                    <div class="blue">[18:01:00] [GM→ALL] 시작. 갓찌를 막아라.</div>
+                    <div class="cyan">[18:04:35] [T1] ✓ M1 CLEAR</div>
+                    <div class="cyan">[18:05:12] [T3] ✓ M1 CLEAR</div>
+                    <div class="red">[18:06:30] [T1] ✗ M2 FAIL (retry)</div>
+                    <div class="cyan">[18:09:13] [T2] ✓ M2 CLEAR</div>
+                    <div class="yellow">[18:10:00] [EVENT] ⚡바이러스 침투!</div>
+                    <div class="blue">[18:12:00] [GM→T1] 힌트: 음계표 재확인</div>
+                    <div class="cyan">[18:15:45] [T2] ✓ M3 CLEAR</div>
+                    <div class="cyan">[18:21:13] [T2] ✓ M4 CLEAR</div>
+                    <div class="cyan">[18:28:04] [T2] ✓ M5 CLEAR ★★★</div>
+                    <div style="color:#33ff33;">[18:32:15] [T2] 🎉 ALL CLEAR! 퇴실 승인됨</div>
+                </div>
+            </div>
+            
+            <!-- 메시지 전송 -->
+            <div class="terminal-box p-4">
+                <div class="crt-glow mb-2">[ GM BROADCAST ]</div>
+                <div class="flex gap-2 mb-2">
+                    <select style="width:100px;">
+                        <option>ALL</option>
+                        <option>T1</option>
+                        <option>T2</option>
+                        <option>T3</option>
+                    </select>
+                    <input type="text" class="flex-1" placeholder="메시지 입력...">
+                </div>
+                <button class="w-full">[SEND MESSAGE]</button>
+            </div>
+            
+            <!-- GM 컨트롤 -->
+            <div class="terminal-box p-4">
+                <div class="yellow crt-glow mb-2">[ GM CONTROL PANEL ]</div>
+                <div class="flex flex-col gap-2">
+                    <button>🔊 [PLAY BASE MELODY]</button>
+                    <button class="btn-red">⚠ [EMERGENCY ALL PAUSE]</button>
+                    <button style="color:#ffff33; border-color:#ffff33;">🐹 [TRIGGER EVENT]</button>
+                    <button style="color:#33ffff; border-color:#33ffff;">🏁 [EXIT AUTHORIZATION]</button>
+                </div>
+            </div>
+            
+            <!-- 갓찌 상태 -->
+            <div class="terminal-box p-3 text-center">
+                <div class="dim" style="font-size:14px;">[ INTRUDER STATUS ]</div>
+                <pre class="ascii-art" style="font-size:12px; color:#ffaa33;">
+    (\__/)
+    (•ㅅ•)  &lt; "아직도 못풀었어?"
+   /    づ🌻
+                </pre>
+                <div class="yellow" style="font-size:14px;">갓찌 위치: 환풍구 내부</div>
+                <div class="dim" style="font-size:14px;">상태: 해바라기씨 섭취 중...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let seconds = 38 * 60 + 45;
+        setInterval(() => {
+            seconds--;
+            if (seconds < 0) seconds = 0;
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            document.getElementById('main-timer').innerText = `${m}:${s}`;
+        }, 1000);
+    </script>
+</body>
+</html>

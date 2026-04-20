@@ -36,6 +36,7 @@ public:
     void setSendMessageCallback(const std::function<void(const QString &)> &cb);
     void setProgressUpdateCallback(const std::function<void(int missionNumber, int progress)> &cb);
     int missionProgress() const { return m_currentProgress; }
+    void restoreProgress(int percent) { m_currentProgress = percent; setMissionProgress(percent); }
 
 private:
     void setupUi();
