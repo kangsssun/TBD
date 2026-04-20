@@ -416,10 +416,11 @@ KeyboardPanel buildKeyboardPanel(
     keypadScroll->setFrameShape(QFrame::NoFrame);
     keypadScroll->setWidgetResizable(true);
     keypadScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    keypadScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    keypadScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     keypadScroll->setWidget(keypadContainer);
     keypadScroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     keypadScroll->setMaximumWidth(scaledSize(700, 400));
+    keypadScroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
 
     // ── Special button bar ─────────────────────────────────────────────
 
