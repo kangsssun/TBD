@@ -1,0 +1,10 @@
+/build-game_node-qt_embedded-Debug
+build-game_node-qt_embedded-Debug/contactgmdialog.o
+build-game_node-qt_embedded-Debug/emergencypage.o
+build-game_node-qt_embedded-Debug/game_node
+build-game_node-qt_embedded-Debug/game_node.o
+build-game_node-qt_embedded-Debug/main.o
+build-game_node-qt_embedded-Debug/missionpage.o
+build-game_node-qt_embedded-Debug/moc_missionpage.o
+build-game_node-qt_embedded-Debug/moc_readypage.o
+build-game_node-qt_embedded-Debug/readypage.o
