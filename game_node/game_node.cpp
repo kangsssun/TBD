@@ -224,9 +224,12 @@ void GameNode::onReadyRead()
             QJsonDocument doc = QJsonDocument::fromJson(message, &err);
             
             if(err.error != QJsonParseError::NoError || !doc.isObject()) {
-                qWarning() << "[SYSTEM] Invalid JSON:" << message;
+                qWarning() << "[PARSE] Invalid JSON:" << message.left(200);
             } else {
+                QString msgType = doc.object()["type"].toString();
+                qDebug() << "[MSG_IN]" << msgType << "(len=" << message.size() << ")";
                 handleServerMessage(doc.object());
+                qDebug() << "[MSG_OK]" << msgType;
             }
         }
         newlineIndex = m_buffer.indexOf('\n');
@@ -236,8 +239,13 @@ void GameNode::onReadyRead()
 void GameNode::handleServerMessage(const QJsonObject &json)
 {
     QString type = json["type"].toString();
+    qDebug() << "[HANDLE] >>>" << type;
 
-    if (type == "timer_control") {
+    if (type == "assign_team_id") {
+        m_teamId = json["team_id"].toInt();
+        qDebug() << "[HANDLE] Server assigned team_id:" << m_teamId;
+    }
+    else if (type == "timer_control") {
         QString action = json["action"].toString();
         qDebug() << "[SYSTEM] Timer action received:" << action;
         if (m_readyPage) {
@@ -286,6 +294,14 @@ void GameNode::handleServerMessage(const QJsonObject &json)
 
         m_teamId = teamId;
         m_teamName = teamName;
+
+        // 초기 상태(mission=1, progress=0)이면 UI 전환 없이 팀 정보만 저장
+        // (아직 타이틀/팀명 입력 단계이므로 미션 페이지를 만들지 않음)
+        if (mission <= 1 && progress <= 0) {
+            qDebug() << "[SYSTEM] Initial state restore — skipping mission page creation";
+            return;
+        }
+
         stopTitleMusic();
 
         if (m_readyPage) {

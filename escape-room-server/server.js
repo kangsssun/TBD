@@ -22,6 +22,9 @@ let timerState = { timeRemaining: 45 * 60, running: false };
 // key: IP주소, value: { team_id, team_name, mission, progress }
 const savedNodes = {};
 
+// 연결 순서 기반 팀 ID 자동 할당 카운터
+let nextTeamId = 1;
+
 // 접속된 클라이언트(소켓)들을 관리하기 위한 Map (key: socket, value: 메타데이터)
 const clients = new Map();
 
@@ -69,13 +72,16 @@ wss.on('connection', (ws, req) => {
                     // 복원 후 평균 진행도 동기화
                     setTimeout(() => broadcastProgressSync(), 500);
                 } else {
-                    // 새 노드 — 저장
-                    if (data.team_id && !gameState[data.team_id]) {
-                        gameState[data.team_id] = { mission: 1, progress: 0 };
+                    // 새 노드 — 서버가 team_id 할당
+                    const assignedId = nextTeamId++;
+                    clientInfo.team_id = assignedId;
+                    gameState[assignedId] = { mission: 1, progress: 0 };
+                    if (nodeIp) {
+                        savedNodes[nodeIp] = { team_id: assignedId, team_name: data.team_name || null, mission: 1, progress: 0 };
                     }
-                    if (nodeIp && data.team_id) {
-                        savedNodes[nodeIp] = { team_id: data.team_id, team_name: data.team_name || null, mission: 1, progress: 0 };
-                    }
+                    console.log(`[ASSIGN] IP ${nodeIp} → Team ${assignedId}`);
+                    // 노드에게 할당된 team_id 알려줌
+                    ws.send(JSON.stringify({ type: 'assign_team_id', team_id: assignedId }));
                 }
                 broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
             }
@@ -270,38 +276,34 @@ function broadcastAll(data) {
     }
     // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
-        client.write(payload + '\n');
+        try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
     }
 }
 
 function broadcastToRole(role, data) {
     const payload = JSON.stringify(data);
-    // WebSocket 브로드캐스트
     for (let [client, info] of clients.entries()) {
         if (info.role === role && client.readyState === WebSocket.OPEN) {
             client.send(payload);
         }
     }
-    // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === role) {
-            client.write(payload + '\n');
+            try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
         }
     }
 }
 
 function sendToTeam(teamId, data) {
     const payload = JSON.stringify(data);
-    // WebSocket 브로드캐스트
     for (let [client, info] of clients.entries()) {
         if (info.role === 'node' && String(info.team_id) === String(teamId) && client.readyState === WebSocket.OPEN) {
             client.send(payload);
         }
     }
-    // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === 'node' && String(info.team_id) === String(teamId)) {
-            client.write(payload + '\n');
+            try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
         }
     }
 }
@@ -356,12 +358,16 @@ const tcpServer = net.createServer((socket) => {
                             // 복원 후 평균 진행도 동기화
                             setTimeout(() => broadcastProgressSync(), 500);
                         } else {
-                            if (msg.team_id && !gameState[msg.team_id]) {
-                                gameState[msg.team_id] = { mission: 1, progress: 0 };
+                            // 새 노드 — 서버가 team_id 할당
+                            const assignedId = nextTeamId++;
+                            clientInfo.team_id = assignedId;
+                            gameState[assignedId] = { mission: 1, progress: 0 };
+                            if (nodeIp) {
+                                savedNodes[nodeIp] = { team_id: assignedId, team_name: msg.team_name || null, mission: 1, progress: 0 };
                             }
-                            if (nodeIp && msg.team_id) {
-                                savedNodes[nodeIp] = { team_id: msg.team_id, team_name: msg.team_name || null, mission: 1, progress: 0 };
-                            }
+                            console.log(`[TCP ASSIGN] IP ${nodeIp} → Team ${assignedId}`);
+                            // 노드에게 할당된 team_id 알려줌
+                            socket.write(JSON.stringify({ type: 'assign_team_id', team_id: assignedId }) + '\n');
                         }
                         broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
                         // 새로 연결된 노드에게 현재 타이머 동기화
@@ -393,7 +399,7 @@ const tcpServer = net.createServer((socket) => {
 
                 if (msg.type === 'qr_decode_request') {
                     const imageBase64 = msg.image;
-                    const QR_CORRECT_ANSWER = 'https//m.site.naver.com/263Ew';
+                    const QR_CORRECT_ANSWER = 'https://m.site.naver.com/263Ew';
                     let qrResult = '';
                     let qrStatus = 'invalid'; // 'invalid' | 'wrong' | 'correct'
                     try {
@@ -480,7 +486,11 @@ function broadcastProgressSync() {
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === 'node' && info.team_id) {
             const myProgress = gameState[info.team_id] ? gameState[info.team_id].progress : 0;
-            client.write(JSON.stringify({ type: 'progress_sync', my_progress: myProgress, avg_progress: avgProgress }) + '\n');
+            try {
+                if (!client.destroyed) {
+                    client.write(JSON.stringify({ type: 'progress_sync', my_progress: myProgress, avg_progress: avgProgress }) + '\n');
+                }
+            } catch (e) { /* socket already closed */ }
         }
     }
 }

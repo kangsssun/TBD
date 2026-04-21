@@ -201,7 +201,7 @@ void MissionPage::startMission3CameraPreview()
 
     // 카메라 초기화 실패 시 10초 쿨다운
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (m_mission3LastCameraAttemptMs > 0 && (now - m_mission3LastCameraAttemptMs) < 10000) {
+    if (m_mission3LastCameraAttemptMs > 0 && (now - m_mission3LastCameraAttemptMs) < 3000) {
         return;
     }
 
