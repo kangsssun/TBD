@@ -12,6 +12,8 @@ class QPushButton;
 class QTimer;
 class QShowEvent;
 class QHideEvent;
+class QSlider;
+class QGraphicsOpacityEffect;
 
 /**
  * @brief Base class for all mission pages.
@@ -40,6 +42,9 @@ public:
 signals:
     void missionCompleted(int missionNumber);
     void missionFailed(int missionNumber);
+
+private slots:
+    void onFrequencyChanged(int value);
 
 protected:
     virtual void setupMission();
@@ -109,6 +114,14 @@ private:
 
     // QR fallback callback (Mission 3)
     std::function<void(const QByteArray &imageData, const std::function<void(const QString &status, const QString &result)> &callback)> m_qrSubmitCb;
+
+    // Mission 2 noise filtering
+    QLabel *m_mission2SecretLabel = nullptr;
+    QLabel *m_mission2NoiseLabel = nullptr;
+    QLabel *m_mission2FreqLabel = nullptr;
+    QLabel *m_mission2ResultLabel = nullptr;
+    QSlider *m_mission2Slider = nullptr;
+    QGraphicsOpacityEffect *m_mission2NoiseEffect = nullptr;
 
     static bool s_operatorMode;
 };

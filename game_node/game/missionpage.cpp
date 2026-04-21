@@ -36,16 +36,7 @@ bool MissionPage::isOperatorMode()
 
 void MissionPage::syncOperatorModeUi()
 {
-    if (!s_operatorMode) {
-        return;
-    }
-
-    const QList<QPushButton *> buttons = findChildren<QPushButton *>();
-    for (QPushButton *button : buttons) {
-        if (button && button->text().contains(QStringLiteral("SUBMIT"), Qt::CaseInsensitive)) {
-            button->setEnabled(true);
-        }
-    }
+    // Reserved for future operator-mode UI tweaks.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

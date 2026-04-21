@@ -255,12 +255,38 @@ void ReadyPage::setupUi()
         });
     });
 
-    auto *helpButton = new QPushButton(QStringLiteral("GUIDE"), headerButtonArea);
+    auto *helpButton = new QPushButton(
+        MissionPage::isOperatorMode() ? QStringLiteral("SKIP ▶") : QStringLiteral("GUIDE"),
+        headerButtonArea);
     helpButton->setObjectName(QStringLiteral("helpButton"));
     helpButton->setCursor(Qt::PointingHandCursor);
     helpButton->setFixedHeight(headerControlHeight);
     helpButton->setFixedWidth(contactGmButton->sizeHint().width());
-    QObject::connect(helpButton, &QPushButton::clicked, this, [this]() {
+    QObject::connect(helpButton, &QPushButton::clicked, this, [this, helpButton]() {
+        // ── Operator mode: force-skip to next mission ──────────────
+        if (MissionPage::isOperatorMode()) {
+            auto *cur = currentMission();
+            if (!cur) return;
+            const int curNum = cur->missionNumber();
+            if (curNum >= 5) return; // already at last mission
+
+            // Prevent rapid repeated clicks from skipping multiple missions
+            helpButton->setEnabled(false);
+            QTimer::singleShot(800, helpButton, [helpButton]() {
+                helpButton->setEnabled(true);
+            });
+
+            setMissionProgress(m_currentProgress + 20);
+            if (m_progressUpdateCb) {
+                m_progressUpdateCb(curNum + 1, m_currentProgress);
+            }
+            auto *nextMission = new MissionPage(curNum + 1, this);
+            setMissionWidget(nextMission);
+            nextMission->startMission();
+            return;
+        }
+
+        // ── Normal mode: show game guide dialog ────────────────────
         QDialog dialog(this);
         dialog.setObjectName(QStringLiteral("gameHelpDialog"));
         dialog.setWindowTitle(QStringLiteral("GAME GUIDE"));
