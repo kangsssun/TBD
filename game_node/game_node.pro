@@ -16,11 +16,14 @@ unix {
     SOURCES += dd_api/led_api.c \ 
                dd_api/camera_api.c \
                dd_api/buzzer_api.c \
-               dd_api/zyro_api.c
+               dd_api/zyro_api.c \
+               dd_api/thermal_api.c
+
     HEADERS += dd_api/led_api.h \ 
                dd_api/camera_api.h \
                dd_api/buzzer_api.h \
-               dd_api/zyro_api.h
+               dd_api/zyro_api.h \
+               dd_api/thermal_api.h
 }
 
 # You can make your code fail to compile if it uses deprecated APIs.
