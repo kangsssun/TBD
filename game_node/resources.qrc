@@ -1,7 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>images/title.png</file>
-        <file>images/misson_1.png</file>
+        <file>images/mission_1.png</file>
         <file>images/mission_2.png</file>
         <file>images/mission1_complete.png</file>
         <file>images/mission2_complete.png</file>

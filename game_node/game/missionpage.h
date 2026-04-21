@@ -2,6 +2,7 @@
 #define MISSIONPAGE_H
 
 #include <QWidget>
+#include <functional>
 
 class QObject;
 class QEvent;
@@ -53,8 +54,21 @@ private:
     void setupMission3();
     void setupMission4();
     void setupMission5();
+
     void showStoryPopup();
     void showResultPopup(bool correct);
+
+    // Per-mission story / result popups (implemented in missionX.cpp)
+    void showMission1Story();
+    void showMission1Result(bool correct);
+    void showMission2Story();
+    void showMission2Result(bool correct);
+    void showMission3Story();
+    void showMission3Result(bool correct);
+    void showMission4Story();
+    void showMission4Result(bool correct);
+    void showMission5Story();
+    void showMission5Result(bool correct);
     void showImagePopup(const QString &imagePath,
                         const QString &btnText,
                         const QString &btnColor,

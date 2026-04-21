@@ -13,12 +13,21 @@ unix {
     QMAKE_CFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
     QMAKE_CXXFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
 
-    SOURCES += dd_api/led_api.c \ 
-               dd_api/camera_api.c \
-               dd_api/buzzer_api.c
-    HEADERS += dd_api/led_api.h \ 
-               dd_api/camera_api.h \
-               dd_api/buzzer_api.h
+    SOURCES += \
+        dd_api/led_api.c \
+        dd_api/camera_api.c \
+        dd_api/buzzer_api.c \
+        dd_api/thermal_api.c \
+        dd_api/zyro_api.c
+
+    HEADERS += \
+        dd_api/led_api.h \
+        dd_api/led_ioctl.h \
+        dd_api/camera_api.h \
+        dd_api/buzzer_api.h \
+        dd_api/buzzer_ioctl.h \
+        dd_api/thermal_api.h \
+        dd_api/zyro_api.h
 }
 
 # You can make your code fail to compile if it uses deprecated APIs.
@@ -35,6 +44,11 @@ SOURCES += \
     intro/emergencypage.cpp \
     game/readypage.cpp \
     game/missionpage.cpp \
+    game/mission1.cpp \
+    game/mission2.cpp \
+    game/mission3.cpp \
+    game/mission4.cpp \
+    game/mission5.cpp \
     chat/contactgmdialog.cpp \
     notice/noticedialog.cpp
 
@@ -45,6 +59,7 @@ HEADERS += \
     intro/emergencypage.h \
     game/readypage.h \
     game/missionpage.h \
+    game/missionpage_utils.h \
     chat/contactgmdialog.h \
     notice/noticedialog.h
 

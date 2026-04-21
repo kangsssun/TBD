@@ -1,4 +1,6 @@
 #include "buzzer_api.h"
+#include <signal.h>
+#include <sys/wait.h>
 
 #define DEV_NAME "/dev/mybuzzer"
 

@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QFileInfoList>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
 #include <QMouseEvent>
 #include <QEvent>
@@ -34,10 +35,10 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
-    , m_teamId(1)
     , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
     , m_operatorMode(false)
+    , m_teamId(1)
     , m_serverIp(QStringLiteral("192.168.10.10"))
     , m_serverPort(5000)
 {
