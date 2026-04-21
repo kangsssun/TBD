@@ -11,6 +11,7 @@
 #include <QPixmap>
 #include <QThread>
 #include <QMetaObject>
+#include <QFile>
 
 #ifdef Q_OS_LINUX
 #include "dd_api/camera_api.h"
@@ -249,12 +250,43 @@ void MissionPage::setupMission3()
         resetButtonHoverState(btnReset);
     });
 
-    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus]() {
+    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, btnSubmit, captureStatus]() {
         if (m_mission3CapturedImagePath.isEmpty()) {
             captureStatus->setText(QStringLiteral("제출할 캡처 이미지를 먼저 생성하세요."));
             return;
         }
-        showResultPopup(true);
+        // 이미지 파일을 읽어서 서버로 QR 디코드 요청 전송
+        QFile imgFile(m_mission3CapturedImagePath);
+        if (!imgFile.open(QIODevice::ReadOnly)) {
+            captureStatus->setText(QStringLiteral("이미지 파일을 열 수 없습니다."));
+            return;
+        }
+        QByteArray imageData = imgFile.readAll();
+        imgFile.close();
+
+        if (!m_qrSubmitCb) {
+            captureStatus->setText(QStringLiteral("서버 연결 콜백이 설정되지 않았습니다."));
+            return;
+        }
+
+        btnSubmit->setEnabled(false);
+        captureStatus->setText(QStringLiteral("QR 코드 분석 중..."));
+        captureStatus->setVisible(true);
+
+        m_qrSubmitCb(imageData, [this, btnSubmit, captureStatus](const QString &status, const QString &result) {
+            Q_UNUSED(result);
+            QMetaObject::invokeMethod(this, [this, btnSubmit, captureStatus, status]() {
+                btnSubmit->setEnabled(true);
+                captureStatus->setVisible(true);
+                if (status == QStringLiteral("correct")) {
+                    captureStatus->setText(QStringLiteral("✅ 정답! QR 인증 성공"));
+                    showResultPopup(true);
+                } else {
+                    captureStatus->setText(QStringLiteral("❌ QR 인증 실패. 다시 시도하세요."));
+                    showResultPopup(false);
+                }
+            }, Qt::QueuedConnection);
+        });
     });
 
     auto *actionRow = new QHBoxLayout();

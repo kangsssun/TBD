@@ -371,8 +371,9 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         QString result = json["result"].toString();
         qDebug() << "[SYSTEM] QR decode result: status=" << status << "result=" << result;
         if (m_qrResultCb) {
-            m_qrResultCb(status, result);
+            auto cb = std::move(m_qrResultCb);
             m_qrResultCb = nullptr;
+            cb(status, result);
         }
     }
 }
