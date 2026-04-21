@@ -2,6 +2,10 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const net = require('net');
+const fs = require('fs');
+const path = require('path');
+const jsQR = require('jsqr');
+const Jimp = require('jimp');
 
 const app = express();
 const server = http.createServer(app);
@@ -62,6 +66,8 @@ wss.on('connection', (ws, req) => {
                         mission: saved.mission,
                         progress: saved.progress
                     }));
+                    // 복원 후 평균 진행도 동기화
+                    setTimeout(() => broadcastProgressSync(), 500);
                 } else {
                     // 새 노드 — 저장
                     if (data.team_id && !gameState[data.team_id]) {
@@ -136,6 +142,70 @@ wss.on('connection', (ws, req) => {
             broadcastToRole('node', data);
             // GM에게도 현재 시간 동기화
             broadcastToRole('gm', { type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running });
+            return;
+        }
+
+        // F-1. GM 관리자 커맨드
+        if (data.type === 'gm_command' && clientInfo.role === 'gm') {
+            const tid = String(data.team_id);
+            console.log(`[GM_CMD] command=${data.command} team=${tid} args=`, data);
+
+            if (data.command === 'move_mission') {
+                const mission = data.mission;
+                const progress = (mission - 1) * 20; // mission 1 clear = 20%, mission 2 clear = 40% ...
+                gameState[tid] = { mission: mission, progress: progress };
+                // savedNodes 업데이트
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = mission;
+                        savedNodes[ip].progress = progress;
+                    }
+                }
+                // 해당 팀 노드에 강제 미션 이동 명령
+                sendToTeam(tid, { type: 'force_move_mission', mission: mission, progress: progress });
+                // GM에게 진행도 업데이트 브로드캐스트
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: mission, progress: progress });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'skip_mission') {
+                const cur = gameState[tid] ? gameState[tid].mission : 1;
+                const nextMission = Math.min(cur + 1, 5);
+                const progress = (nextMission - 1) * 20;
+                gameState[tid] = { mission: nextMission, progress: progress };
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = nextMission;
+                        savedNodes[ip].progress = progress;
+                    }
+                }
+                sendToTeam(tid, { type: 'force_move_mission', mission: nextMission, progress: progress });
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: nextMission, progress: progress });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'set_progress') {
+                const pct = data.progress;
+                const mission = Math.min(5, Math.floor(pct / 20) + 1);
+                gameState[tid] = { mission: mission, progress: pct };
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = mission;
+                        savedNodes[ip].progress = pct;
+                    }
+                }
+                sendToTeam(tid, { type: 'force_set_progress', mission: mission, progress: pct });
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: mission, progress: pct });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'send_hint') {
+                sendToTeam(tid, { type: 'chat_message', sender: 'gm', text: '[HINT] ' + (data.hint || '') });
+                broadcastToRole('gm', { type: 'chat_message', sender: 'gm', team_id: tid, text: '[HINT→T' + tid + '] ' + (data.hint || '') });
+            }
+            else if (data.command === 'pause_team') {
+                sendToTeam(tid, { type: 'team_pause', paused: true });
+            }
+            else if (data.command === 'resume_team') {
+                sendToTeam(tid, { type: 'team_pause', paused: false });
+            }
             return;
         }
 
@@ -245,7 +315,7 @@ const tcpServer = net.createServer((socket) => {
 
     let buffer = '';
 
-    socket.on('data', (data) => {
+    socket.on('data', async (data) => {
         buffer += data.toString();
         let parts = buffer.split('\n');
         buffer = parts.pop(); // incomplete message
@@ -283,6 +353,8 @@ const tcpServer = net.createServer((socket) => {
                                 mission: saved.mission,
                                 progress: saved.progress
                             }) + '\n');
+                            // 복원 후 평균 진행도 동기화
+                            setTimeout(() => broadcastProgressSync(), 500);
                         } else {
                             if (msg.team_id && !gameState[msg.team_id]) {
                                 gameState[msg.team_id] = { mission: 1, progress: 0 };
@@ -316,6 +388,54 @@ const tcpServer = net.createServer((socket) => {
                         sendToTeam(msg.target, msg);
                         broadcastToRole('gm', msg);
                     }
+                    continue;
+                }
+
+                if (msg.type === 'qr_decode_request') {
+                    const imageBase64 = msg.image;
+                    const QR_CORRECT_ANSWER = 'https//m.site.naver.com/263Ew';
+                    let qrResult = '';
+                    let qrStatus = 'invalid'; // 'invalid' | 'wrong' | 'correct'
+                    try {
+                        const imgBuf = Buffer.from(imageBase64, 'base64');
+                        const image = await Jimp.read(imgBuf);
+                        const { width, height, data } = image.bitmap;
+                        const code = jsQR(new Uint8ClampedArray(data), width, height);
+                        if (code && code.data) {
+                            qrResult = code.data;
+                            if (qrResult === QR_CORRECT_ANSWER) {
+                                qrStatus = 'correct';
+                            } else {
+                                qrStatus = 'wrong';
+                            }
+                        } else {
+                            qrStatus = 'invalid';
+                            qrResult = '';
+                        }
+                    } catch (e) {
+                        console.error('[QR] 디코드 에러:', e.message);
+                        qrStatus = 'invalid';
+                    }
+
+                    // 결과를 노드에 반환
+                    socket.write(JSON.stringify({ type: 'qr_decode_result', status: qrStatus, result: qrResult }) + '\n');
+
+                    // GM 로그 메시지 생성
+                    const teamLabel = `T${msg.team_id || '?'}`;
+                    let logText = '';
+                    if (qrStatus === 'correct') {
+                        logText = `[${teamLabel}] ✅ QR 정답! → ${qrResult}`;
+                    } else if (qrStatus === 'wrong') {
+                        logText = `[${teamLabel}] ❌ QR 오답 → ${qrResult}`;
+                    } else {
+                        logText = `[${teamLabel}] ⚠ 유효하지 않은 QR (디코드 실패)`;
+                    }
+                    console.log('[QR]', logText);
+                    broadcastToRole('gm', {
+                        type: 'chat_message', sender: 'system',
+                        team_id: msg.team_id, team_name: msg.team_name || '',
+                        text: logText
+                    });
                     continue;
                 }
             } catch (err) {

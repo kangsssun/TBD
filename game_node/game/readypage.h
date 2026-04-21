@@ -35,6 +35,7 @@ public:
 
     void setSendMessageCallback(const std::function<void(const QString &)> &cb);
     void setProgressUpdateCallback(const std::function<void(int missionNumber, int progress)> &cb);
+    void setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb);
     int missionProgress() const { return m_currentProgress; }
     void restoreProgress(int percent) { m_currentProgress = percent; setMissionProgress(percent); }
 
@@ -65,6 +66,7 @@ private:
     QStringList m_directMessages;
     std::function<void(const QString &)> m_sendMessageCb;
     std::function<void(int, int)> m_progressUpdateCb;
+    std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> m_qrSubmitCb;
     int m_currentProgress;
 };
 

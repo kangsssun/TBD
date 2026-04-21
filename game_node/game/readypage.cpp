@@ -130,6 +130,11 @@ void ReadyPage::setProgressUpdateCallback(const std::function<void(int missionNu
     m_progressUpdateCb = cb;
 }
 
+void ReadyPage::setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb)
+{
+    m_qrSubmitCb = cb;
+}
+
 void ReadyPage::setMissionWidget(MissionPage *mission)
 {
     if (!m_eventLayout) return;
@@ -145,6 +150,11 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
     if (mission) {
         m_eventLayout->addWidget(mission, 1);
         if (m_eventTitleLabel) m_eventTitleLabel->hide();
+
+        // Forward QR submit callback to mission page
+        if (m_qrSubmitCb) {
+            mission->setQrSubmitCallback(m_qrSubmitCb);
+        }
 
         // When mission completes, advance to the next mission
         QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {

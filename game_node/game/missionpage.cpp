@@ -18,7 +18,9 @@
 #include <QStyle>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QMetaObject>
 #include <QShowEvent>
 #include <QHideEvent>
@@ -91,6 +93,7 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
     , m_mission3CaptureInProgress(false)
     , m_mission3PendingStop(false)
     , m_mission3CapturedImagePath()
+    , m_mission3LastCameraAttemptMs(0)
 {
     setObjectName(QStringLiteral("missionPage_%1").arg(missionNumber));
 
@@ -196,6 +199,12 @@ void MissionPage::startMission3CameraPreview()
         return;
     }
 
+    // 카메라 초기화 실패 시 10초 쿨다운
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_mission3LastCameraAttemptMs > 0 && (now - m_mission3LastCameraAttemptMs) < 10000) {
+        return;
+    }
+
 #ifdef Q_OS_LINUX
     if (!isVisible() || !m_mission3PreviewArea->isVisible()) {
         return;
@@ -246,6 +255,11 @@ void MissionPage::startMission3CameraPreview()
     const int result = camera_init(topLeft.x(), topLeft.y(), width, height);
     m_mission3CameraStarting = false;
     m_mission3CameraActive = (result == 0);
+    if (!m_mission3CameraActive) {
+        m_mission3LastCameraAttemptMs = QDateTime::currentMSecsSinceEpoch();
+    } else {
+        m_mission3LastCameraAttemptMs = 0;
+    }
 #endif
 }
 
@@ -1471,6 +1485,11 @@ void MissionPage::resetToStory()
     }
 }
 
+void MissionPage::setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb)
+{
+    m_qrSubmitCb = cb;
+}
+
 void MissionPage::startMission()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
@@ -1879,7 +1898,7 @@ void MissionPage::setupMission3()
     btnSubmit->setFocusPolicy(Qt::NoFocus);
     btnSubmit->setAutoRepeat(false);
     btnSubmit->setFixedSize(200, 48);
-    btnSubmit->setEnabled(s_operatorMode);
+    btnSubmit->setEnabled(true); // 카메라 없어도 QR fallback 가능
     btnSubmit->setStyleSheet(QStringLiteral(
         "QPushButton { background-color: #1a0a28; color: #ff4444; border: 1px solid #ff4444; "
         "border-radius: 6px; font-size: 18px; font-weight: 800; "
@@ -1966,11 +1985,47 @@ void MissionPage::setupMission3()
     });
 
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus]() {
-        if (m_mission3CapturedImagePath.isEmpty() && !s_operatorMode) {
-            captureStatus->setText(QStringLiteral("제출할 캡처 이미지를 먼저 생성하세요."));
+        // 촬영된 이미지가 없으면 제출 불가
+        if (m_mission3CapturedImagePath.isEmpty()) {
+            captureStatus->setText(QStringLiteral("제출할 캡처 이미지를 먼저 촬영하세요."));
             return;
         }
-        showResultPopup(true);
+
+        // 이미지 파일 읽기
+        QFile imgFile(m_mission3CapturedImagePath);
+        if (!imgFile.open(QIODevice::ReadOnly)) {
+            captureStatus->setText(QStringLiteral("이미지 파일을 읽을 수 없습니다."));
+            return;
+        }
+        QByteArray imageData = imgFile.readAll();
+        imgFile.close();
+
+        if (imageData.isEmpty()) {
+            captureStatus->setText(QStringLiteral("이미지 파일이 비어있습니다."));
+            return;
+        }
+
+        captureStatus->setText(QStringLiteral("QR 이미지를 서버로 전송 중..."));
+
+        if (m_qrSubmitCb) {
+            m_qrSubmitCb(imageData, [this, captureStatus](const QString &status, const QString &result) {
+                QMetaObject::invokeMethod(this, [this, captureStatus, status, result]() {
+                    if (status == QStringLiteral("correct")) {
+                        captureStatus->setText(QStringLiteral("✅ 정답! QR 인증 성공"));
+                        showResultPopup(true);
+                    } else if (status == QStringLiteral("wrong")) {
+                        captureStatus->setText(QStringLiteral("❌ 오답: ") + result);
+                        showResultPopup(false);
+                    } else {
+                        // invalid
+                        captureStatus->setText(QStringLiteral("⚠ 유효하지 않은 QR입니다. 다시 촬영해주세요."));
+                        showResultPopup(false);
+                    }
+                }, Qt::QueuedConnection);
+            });
+        } else {
+            captureStatus->setText(QStringLiteral("서버 연결이 필요합니다."));
+        }
     });
 
     auto *actionRow = new QHBoxLayout();
