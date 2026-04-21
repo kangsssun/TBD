@@ -2,7 +2,6 @@
 #define GAME_NODE_H
 
 #include <QWidget>
-#include <QProcess>
 #include <QTimer>
 #include <QTcpSocket>
 #include <QJsonObject>
@@ -44,11 +43,6 @@ protected:
 
 private:
     void applyStyles();
-    void playTitleMusicIfNeeded();
-    void stopTitleMusic();
-    void setupAlsaEnvironment();
-    QString findFirstSongFile() const;
-    QString findAplayProgram() const;
     void initializeSocket();
     void registerWithServer();
     void handleServerMessage(const QJsonObject &json);
@@ -68,8 +62,6 @@ private:
     QTimer *m_blinkTimer;
     bool m_teamDialogOpen;
     bool m_ignoreTitleTap;
-    QProcess *m_titleAudioProcess;
-    bool m_titleMusicStarted;
     bool m_operatorMode;
 
     QTcpSocket m_socket;
