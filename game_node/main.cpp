@@ -1,7 +1,16 @@
 #include <QApplication>
 #include <QFont>
 #include <QFontDatabase>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include "game_node.h"
+
+static void crashHandler(int sig) {
+    fprintf(stderr, "\n[CRASH] Signal %d received! (SIGSEGV=%d, SIGABRT=%d)\n", sig, SIGSEGV, SIGABRT);
+    fflush(stderr);
+    std::_Exit(128 + sig);
+}
 
 namespace {
 QString loadPreferredUiFontFamily()
@@ -19,6 +28,9 @@ QString loadPreferredUiFontFamily()
 
 int main(int argc, char *argv[])
 {
+    std::signal(SIGSEGV, crashHandler);
+    std::signal(SIGABRT, crashHandler);
+
     QApplication app(argc, argv);
 
     const QString uiFontFamily = loadPreferredUiFontFamily();

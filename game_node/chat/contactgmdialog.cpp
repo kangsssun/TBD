@@ -1,4 +1,5 @@
 #include "contactgmdialog.h"
+#include "../game/readypage.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -348,9 +349,19 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     const QString gmBubble = QStringLiteral(
         "background-color:#164e63; color:#ecfeff; border:1px solid #0e7490; "
         "border-radius:10px; padding:6px 10px; font-size:14px;");
+    const QString myBubble = QStringLiteral(
+        "background-color:#14532d; color:#fff; border:1px solid #10b981; "
+        "border-radius:10px; padding:6px 10px; font-size:14px;");
     for (const auto &msg : messages) {
-        addChatEntry(QStringLiteral("GM"), msg, Qt::AlignLeft, gmBubble,
-                     QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+        if (msg.startsWith(QStringLiteral("[ME] "))) {
+            const QString myText = msg.mid(5);
+            const QString sender = teamName.isEmpty() ? QStringLiteral("TEAM 1") : teamName;
+            addChatEntry(sender.toUpper(), myText, Qt::AlignRight, myBubble,
+                         QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+        } else {
+            addChatEntry(QStringLiteral("GM"), msg, Qt::AlignLeft, gmBubble,
+                         QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+        }
     }
     if (messages.isEmpty()) {
         addChatEntry(QStringLiteral("GM"), QString::fromUtf8("\xeb\xac\xb8\xec\x9d\x98\xec\x82\xac\xed\x95\xad\xec\x9d\x84 \xec\x9e\x85\xeb\xa0\xa5\xed\x95\xb4 \xec\xa3\xbc\xec\x84\xb8\xec\x9a\x94."),
@@ -552,6 +563,20 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
         dialog.move(c - QPoint(dialog.width() / 2, dialog.height() / 2));
     }
 
+    // ── GM 메시지 실시간 수신 연결 ──────────────────────────────────────
+    QMetaObject::Connection gmConn;
+    auto *readyPage = qobject_cast<ReadyPage *>(parent);
+    if (readyPage) {
+        gmConn = QObject::connect(readyPage, &ReadyPage::gmMessageReceived,
+                                  &dialog, [addChatEntry](const QString &text) {
+            addChatEntry(QStringLiteral("GM"), text, Qt::AlignLeft,
+                         QStringLiteral("background-color:#164e63; color:#ecfeff; border:1px solid #0e7490; "
+                                        "border-radius:10px; padding:6px 10px; font-size:14px;"),
+                         QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")), true);
+        });
+    }
+
     dialog.exec();
+    if (gmConn) QObject::disconnect(gmConn);
     qApp->removeEventFilter(kbToggleFilter);
 }

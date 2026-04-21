@@ -34,10 +34,10 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
+    , m_teamId(1)
     , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
     , m_operatorMode(false)
-    , m_teamId(1)
     , m_serverIp(QStringLiteral("192.168.10.10"))
     , m_serverPort(5000)
 {
@@ -90,6 +90,20 @@ GameNode::GameNode(QWidget *parent)
         msg["progress"] = progress;
         sendMessage(msg);
         qDebug() << "[SYSTEM] Progress updated: mission=" << missionNumber << "progress=" << progress;
+    });
+
+    // ── Set up QR submit callback (camera fallback) ────────────────────
+    m_readyPage->setQrSubmitCallback([this](const QByteArray &imageData, const std::function<void(const QString &, const QString &)> &resultCb) {
+        // 서버로 QR 디코드 요청 전송
+        QJsonObject msg;
+        msg["type"] = "qr_decode_request";
+        msg["team_id"] = m_teamId;
+        msg["team_name"] = m_teamName;
+        msg["image"] = QString::fromLatin1(imageData.toBase64());
+        sendMessage(msg);
+
+        // 결과 콜백 저장 (서버 응답 시 호출)
+        m_qrResultCb = resultCb;
     });
 
     // ── Connect emergency page confirm → go to ready page ──────────────
@@ -210,9 +224,12 @@ void GameNode::onReadyRead()
             QJsonDocument doc = QJsonDocument::fromJson(message, &err);
             
             if(err.error != QJsonParseError::NoError || !doc.isObject()) {
-                qWarning() << "[SYSTEM] Invalid JSON:" << message;
+                qWarning() << "[PARSE] Invalid JSON:" << message.left(200);
             } else {
+                QString msgType = doc.object()["type"].toString();
+                qDebug() << "[MSG_IN]" << msgType << "(len=" << message.size() << ")";
                 handleServerMessage(doc.object());
+                qDebug() << "[MSG_OK]" << msgType;
             }
         }
         newlineIndex = m_buffer.indexOf('\n');
@@ -222,8 +239,13 @@ void GameNode::onReadyRead()
 void GameNode::handleServerMessage(const QJsonObject &json)
 {
     QString type = json["type"].toString();
+    qDebug() << "[HANDLE] >>>" << type;
 
-    if (type == "timer_control") {
+    if (type == "assign_team_id") {
+        m_teamId = json["team_id"].toInt();
+        qDebug() << "[HANDLE] Server assigned team_id:" << m_teamId;
+    }
+    else if (type == "timer_control") {
         QString action = json["action"].toString();
         qDebug() << "[SYSTEM] Timer action received:" << action;
         if (m_readyPage) {
@@ -272,6 +294,14 @@ void GameNode::handleServerMessage(const QJsonObject &json)
 
         m_teamId = teamId;
         m_teamName = teamName;
+
+        // 초기 상태(mission=1, progress=0)이면 UI 전환 없이 팀 정보만 저장
+        // (아직 타이틀/팀명 입력 단계이므로 미션 페이지를 만들지 않음)
+        if (mission <= 1 && progress <= 0) {
+            qDebug() << "[SYSTEM] Initial state restore — skipping mission page creation";
+            return;
+        }
+
         stopTitleMusic();
 
         if (m_readyPage) {
@@ -299,6 +329,51 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         ui->stackedWidget->setCurrentIndex(0);
         playTitleMusicIfNeeded();
     }
+    else if (type == "force_move_mission") {
+        // GM이 특정 미션으로 강제 이동
+        int mission = json["mission"].toInt(1);
+        int progress = json["progress"].toInt(0);
+        qDebug() << "[GM_CMD] Force move to mission" << mission << "progress" << progress;
+        stopTitleMusic();
+        if (m_readyPage) {
+            m_readyPage->restoreProgress(progress);
+            auto *missionPage = new MissionPage(mission, m_readyPage);
+            m_readyPage->setMissionWidget(missionPage);
+            missionPage->startMission();
+        }
+        if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
+            ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
+        }
+    }
+    else if (type == "force_set_progress") {
+        // GM이 진행도 직접 설정
+        int mission = json["mission"].toInt(1);
+        int progress = json["progress"].toInt(0);
+        qDebug() << "[GM_CMD] Force set progress: mission=" << mission << "progress=" << progress;
+        if (m_readyPage) {
+            m_readyPage->restoreProgress(progress);
+            auto *missionPage = new MissionPage(mission, m_readyPage);
+            m_readyPage->setMissionWidget(missionPage);
+            missionPage->startMission();
+        }
+        if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
+            ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
+        }
+    }
+    else if (type == "team_pause") {
+        bool paused = json["paused"].toBool();
+        qDebug() << "[GM_CMD] Team pause:" << paused;
+        // TODO: 팀 일시정지/재개 UI 구현 필요
+    }
+    else if (type == "qr_decode_result") {
+        QString status = json["status"].toString();
+        QString result = json["result"].toString();
+        qDebug() << "[SYSTEM] QR decode result: status=" << status << "result=" << result;
+        if (m_qrResultCb) {
+            m_qrResultCb(status, result);
+            m_qrResultCb = nullptr;
+        }
+    }
 }
 
 void GameNode::showGmNotice(const QString &text)
@@ -322,7 +397,7 @@ void GameNode::showGmNotice(const QString &text)
     QTimer::singleShot(5000, banner, &QLabel::deleteLater);
 }
 
-void GameNode::onConnectionError(QAbstractSocket::SocketError socketError)
+void GameNode::onConnectionError(QAbstractSocket::SocketError /*socketError*/)
 {
     qWarning() << "[SYSTEM] Socket error:" << m_socket.errorString();
     tryReconnect();
@@ -856,29 +931,23 @@ void GameNode::playTitleMusicIfNeeded()
     }
 
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
-        m_titleAudioProcess->terminate();
-        if (!m_titleAudioProcess->waitForFinished(1500)) {
-            m_titleAudioProcess->kill();
-            m_titleAudioProcess->waitForFinished(1000);
-        }
+        m_titleAudioProcess->kill();
+        // 비동기: 끝나면 finished 시그널에서 다시 호출됨
+        return;
     }
 
     const QString aplay = findAplayProgram();
     const QStringList args = { QStringLiteral("-Dhw:0,0"), songFile };
 
     m_titleAudioProcess->start(aplay, args);
-    m_titleMusicStarted = m_titleAudioProcess->waitForStarted(800);
+    m_titleMusicStarted = true;
 }
 
 void GameNode::stopTitleMusic()
 {
     m_titleMusicStarted = false;
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
-        m_titleAudioProcess->terminate();
-        if (!m_titleAudioProcess->waitForFinished(1500)) {
-            m_titleAudioProcess->kill();
-            m_titleAudioProcess->waitForFinished(1000);
-        }
+        m_titleAudioProcess->kill();
     }
 }
 

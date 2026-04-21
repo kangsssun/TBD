@@ -103,6 +103,7 @@ void ReadyPage::addGmDirectMessage(const QString &text)
         m_contactGmButton->setStyleSheet(QStringLiteral(
             "QPushButton#contactGmButton { border: 2px solid #ef4444; color: #ef4444; }"));
     }
+    emit gmMessageReceived(text);
 }
 
 void ReadyPage::setMissionProgress(int percent)
@@ -130,6 +131,11 @@ void ReadyPage::setProgressUpdateCallback(const std::function<void(int missionNu
     m_progressUpdateCb = cb;
 }
 
+void ReadyPage::setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb)
+{
+    m_qrSubmitCb = cb;
+}
+
 void ReadyPage::setMissionWidget(MissionPage *mission)
 {
     if (!m_eventLayout) return;
@@ -145,6 +151,11 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
     if (mission) {
         m_eventLayout->addWidget(mission, 1);
         if (m_eventTitleLabel) m_eventTitleLabel->hide();
+
+        // Forward QR submit callback to mission page
+        if (m_qrSubmitCb) {
+            mission->setQrSubmitCallback(m_qrSubmitCb);
+        }
 
         // When mission completes, advance to the next mission
         QObject::connect(mission, &MissionPage::missionCompleted, this, [this](int completedNumber) {
@@ -237,7 +248,11 @@ void ReadyPage::setupUi()
         m_unreadMessages = 0;
         m_contactGmButton->setText(QStringLiteral("CONTACT GM"));
         m_contactGmButton->setStyleSheet(QString());
-        ContactGmDialog::show(this, m_teamName, m_directMessages, m_sendMessageCb);
+        ContactGmDialog::show(this, m_teamName, m_directMessages, [this](const QString &text) {
+            // 보낸 메시지도 히스토리에 저장
+            m_directMessages.append(QStringLiteral("[ME] ") + text);
+            if (m_sendMessageCb) m_sendMessageCb(text);
+        });
     });
 
     auto *helpButton = new QPushButton(QStringLiteral("GUIDE"), headerButtonArea);

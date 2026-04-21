@@ -10,6 +10,7 @@
 #include <QJsonParseError>
 #include <QHostAddress>
 #include <QLabel>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class GameNode; }
@@ -75,6 +76,7 @@ private:
     QString m_serverIp;
     quint16 m_serverPort;
     QByteArray m_buffer;
+    std::function<void(const QString &status, const QString &result)> m_qrResultCb;
 };
 
 #endif // GAME_NODE_H

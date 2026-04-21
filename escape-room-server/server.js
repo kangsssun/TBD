@@ -2,6 +2,10 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const net = require('net');
+const fs = require('fs');
+const path = require('path');
+const jsQR = require('jsqr');
+const Jimp = require('jimp');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,11 +16,17 @@ app.use(express.static('public'));
 
 // 2. 서버 메모리에 현재 게임 상태 저장
 let gameState = {};
-let timerState = { timeRemaining: 45 * 60, running: false };
+
+// 팀별 타이머 상태: key=team_id, value={ timeRemaining, running }
+const teamTimers = {};
+const TIMER_INITIAL = 45 * 60;
 
 // IP 주소 기반 노드 상태 저장 (재연결 시 복원용)
 // key: IP주소, value: { team_id, team_name, mission, progress }
 const savedNodes = {};
+
+// 연결 순서 기반 팀 ID 자동 할당 카운터
+let nextTeamId = 1;
 
 // 접속된 클라이언트(소켓)들을 관리하기 위한 Map (key: socket, value: 메타데이터)
 const clients = new Map();
@@ -62,22 +72,38 @@ wss.on('connection', (ws, req) => {
                         mission: saved.mission,
                         progress: saved.progress
                     }));
+                    // 복원 후 평균 진행도 동기화
+                    setTimeout(() => broadcastProgressSync(), 500);
                 } else {
-                    // 새 노드 — 저장
-                    if (data.team_id && !gameState[data.team_id]) {
-                        gameState[data.team_id] = { mission: 1, progress: 0 };
+                    // 새 노드 — 서버가 team_id 할당
+                    const assignedId = nextTeamId++;
+                    clientInfo.team_id = assignedId;
+                    gameState[assignedId] = { mission: 1, progress: 0 };
+                    if (nodeIp) {
+                        savedNodes[nodeIp] = { team_id: assignedId, team_name: data.team_name || null, mission: 1, progress: 0 };
                     }
-                    if (nodeIp && data.team_id) {
-                        savedNodes[nodeIp] = { team_id: data.team_id, team_name: data.team_name || null, mission: 1, progress: 0 };
-                    }
+                    console.log(`[ASSIGN] IP ${nodeIp} → Team ${assignedId}`);
+                    // 노드에게 할당된 team_id 알려줌
+                    ws.send(JSON.stringify({ type: 'assign_team_id', team_id: assignedId }));
                 }
                 broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
+                // 팀명이 설정되어 있고 타이머가 아직 안 돌고 있으면 자동 시작
+                const wsTid = String(clientInfo.team_id);
+                const wstt = getTeamTimer(wsTid);
+                if (data.team_name && !wstt.running) {
+                    wstt.running = true;
+                    ensureTimerLoop();
+                    sendToTeam(wsTid, { type: 'timer_control', action: 'start' });
+                    sendToTeam(wsTid, { type: 'timer_sync', timeRemaining: wstt.timeRemaining, running: true });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    console.log(`[TIMER] Team ${wsTid} timer auto-started (WS, team_name: ${data.team_name})`);
+                }
             }
 
             // GM이 접속하면 현재까지의 상태를 한 번 보내줌
             if (data.role === 'gm') {
                 ws.send(JSON.stringify({ type: 'init_state', state: gameState }));    
-                ws.send(JSON.stringify({ type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running }));
+                ws.send(JSON.stringify({ type: 'all_timers', timers: teamTimers }));
                 
                 // 현재 접속 중인 노드 목록도 같이 보내주기
                 const activeTeams = getActiveTeams();
@@ -88,11 +114,24 @@ wss.on('connection', (ws, req) => {
 
         // B. 노드 상태 업데이트 수신
         if (data.type === 'update_progress' && clientInfo.role === 'node') {
-            gameState[data.team_id] = { mission: data.mission, progress: data.progress };
+            const tid = String(data.team_id);
+            gameState[tid] = { mission: data.mission, progress: data.progress };
             // IP 기반 저장 업데이트
             if (clientInfo.ip && savedNodes[clientInfo.ip]) {
                 savedNodes[clientInfo.ip].mission = data.mission;
                 savedNodes[clientInfo.ip].progress = data.progress;
+            }
+            // 미션 1 시작 시 해당 팀 타이머 자동 시작
+            if (data.mission === 1 && data.progress === 0) {
+                const t = getTeamTimer(tid);
+                if (!t.running) {
+                    t.running = true;
+                    ensureTimerLoop();
+                    sendToTeam(tid, { type: 'timer_control', action: 'start' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: true });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    console.log(`[TIMER] Team ${tid} timer auto-started (mission 1)`);
+                }
             }
             // 모든 접속자 중 GM에게만 해당 업데이트 내용을 브로드캐스트
             broadcastToRole('gm', data);
@@ -119,23 +158,95 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
-        // E. 타이머 동기화 제어
+        // E. 팀별 타이머 제어
         if (data.type === 'timer_control' && clientInfo.role === 'gm') {
-            if (data.action === 'start') {
-                timerState.running = true;
-                startServerTimer();
-            } else if (data.action === 'pause') {
-                timerState.running = false;
-                stopServerTimer();
-            } else if (data.action === 'reset') {
-                timerState.running = false;
-                timerState.timeRemaining = 45 * 60;
-                stopServerTimer();
+            const targetTid = data.team_id ? String(data.team_id) : null;
+            // team_id가 'ALL'이면 모든 팀에 적용
+            const tids = (targetTid === 'ALL' || !targetTid) ? Object.keys(teamTimers) : [targetTid];
+            for (const tid of tids) {
+                const t = getTeamTimer(tid);
+                if (data.action === 'start') {
+                    t.running = true;
+                    ensureTimerLoop();
+                    sendToTeam(tid, { type: 'timer_control', action: 'start' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: true });
+                } else if (data.action === 'pause') {
+                    t.running = false;
+                    sendToTeam(tid, { type: 'timer_control', action: 'pause' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                } else if (data.action === 'reset') {
+                    t.running = false;
+                    t.timeRemaining = TIMER_INITIAL;
+                    sendToTeam(tid, { type: 'timer_control', action: 'reset' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                }
             }
-            // 노드에도 전달
-            broadcastToRole('node', data);
-            // GM에게도 현재 시간 동기화
-            broadcastToRole('gm', { type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running });
+            // GM에게 모든 타이머 동기화
+            broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+            return;
+        }
+
+        // F-1. GM 관리자 커맨드
+        if (data.type === 'gm_command' && clientInfo.role === 'gm') {
+            const tid = String(data.team_id);
+            console.log(`[GM_CMD] command=${data.command} team=${tid} args=`, data);
+
+            if (data.command === 'move_mission') {
+                const mission = data.mission;
+                const progress = (mission - 1) * 20; // mission 1 clear = 20%, mission 2 clear = 40% ...
+                gameState[tid] = { mission: mission, progress: progress };
+                // savedNodes 업데이트
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = mission;
+                        savedNodes[ip].progress = progress;
+                    }
+                }
+                // 해당 팀 노드에 강제 미션 이동 명령
+                sendToTeam(tid, { type: 'force_move_mission', mission: mission, progress: progress });
+                // GM에게 진행도 업데이트 브로드캐스트
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: mission, progress: progress });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'skip_mission') {
+                const cur = gameState[tid] ? gameState[tid].mission : 1;
+                const nextMission = Math.min(cur + 1, 5);
+                const progress = (nextMission - 1) * 20;
+                gameState[tid] = { mission: nextMission, progress: progress };
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = nextMission;
+                        savedNodes[ip].progress = progress;
+                    }
+                }
+                sendToTeam(tid, { type: 'force_move_mission', mission: nextMission, progress: progress });
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: nextMission, progress: progress });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'set_progress') {
+                const pct = data.progress;
+                const mission = Math.min(5, Math.floor(pct / 20) + 1);
+                gameState[tid] = { mission: mission, progress: pct };
+                for (const ip of Object.keys(savedNodes)) {
+                    if (String(savedNodes[ip].team_id) === tid) {
+                        savedNodes[ip].mission = mission;
+                        savedNodes[ip].progress = pct;
+                    }
+                }
+                sendToTeam(tid, { type: 'force_set_progress', mission: mission, progress: pct });
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: mission, progress: pct });
+                broadcastProgressSync();
+            }
+            else if (data.command === 'send_hint') {
+                sendToTeam(tid, { type: 'chat_message', sender: 'gm', text: '[HINT] ' + (data.hint || '') });
+                broadcastToRole('gm', { type: 'chat_message', sender: 'gm', team_id: tid, text: '[HINT→T' + tid + '] ' + (data.hint || '') });
+            }
+            else if (data.command === 'pause_team') {
+                sendToTeam(tid, { type: 'team_pause', paused: true });
+            }
+            else if (data.command === 'resume_team') {
+                sendToTeam(tid, { type: 'team_pause', paused: false });
+            }
             return;
         }
 
@@ -200,38 +311,34 @@ function broadcastAll(data) {
     }
     // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
-        client.write(payload + '\n');
+        try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
     }
 }
 
 function broadcastToRole(role, data) {
     const payload = JSON.stringify(data);
-    // WebSocket 브로드캐스트
     for (let [client, info] of clients.entries()) {
         if (info.role === role && client.readyState === WebSocket.OPEN) {
             client.send(payload);
         }
     }
-    // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === role) {
-            client.write(payload + '\n');
+            try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
         }
     }
 }
 
 function sendToTeam(teamId, data) {
     const payload = JSON.stringify(data);
-    // WebSocket 브로드캐스트
     for (let [client, info] of clients.entries()) {
         if (info.role === 'node' && String(info.team_id) === String(teamId) && client.readyState === WebSocket.OPEN) {
             client.send(payload);
         }
     }
-    // TCP 브로드캐스트
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === 'node' && String(info.team_id) === String(teamId)) {
-            client.write(payload + '\n');
+            try { if (!client.destroyed) client.write(payload + '\n'); } catch (e) {}
         }
     }
 }
@@ -245,7 +352,7 @@ const tcpServer = net.createServer((socket) => {
 
     let buffer = '';
 
-    socket.on('data', (data) => {
+    socket.on('data', async (data) => {
         buffer += data.toString();
         let parts = buffer.split('\n');
         buffer = parts.pop(); // incomplete message
@@ -283,26 +390,55 @@ const tcpServer = net.createServer((socket) => {
                                 mission: saved.mission,
                                 progress: saved.progress
                             }) + '\n');
+                            // 복원 후 평균 진행도 동기화
+                            setTimeout(() => broadcastProgressSync(), 500);
                         } else {
-                            if (msg.team_id && !gameState[msg.team_id]) {
-                                gameState[msg.team_id] = { mission: 1, progress: 0 };
+                            // 새 노드 — 서버가 team_id 할당
+                            const assignedId = nextTeamId++;
+                            clientInfo.team_id = assignedId;
+                            gameState[assignedId] = { mission: 1, progress: 0 };
+                            if (nodeIp) {
+                                savedNodes[nodeIp] = { team_id: assignedId, team_name: msg.team_name || null, mission: 1, progress: 0 };
                             }
-                            if (nodeIp && msg.team_id) {
-                                savedNodes[nodeIp] = { team_id: msg.team_id, team_name: msg.team_name || null, mission: 1, progress: 0 };
-                            }
+                            console.log(`[TCP ASSIGN] IP ${nodeIp} → Team ${assignedId}`);
+                            // 노드에게 할당된 team_id 알려줌
+                            socket.write(JSON.stringify({ type: 'assign_team_id', team_id: assignedId }) + '\n');
                         }
                         broadcastToRole('gm', { type: 'node_connected', team_id: clientInfo.team_id, team_name: clientInfo.team_name || null });
-                        // 새로 연결된 노드에게 현재 타이머 동기화
-                        socket.write(JSON.stringify({ type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: timerState.running }) + '\n');
+                        // 새로 연결된 노드에게 해당 팀 타이머 동기화
+                        const tid = String(clientInfo.team_id);
+                        const tt = getTeamTimer(tid);
+                        // 팀명이 설정되어 있고 타이머가 아직 안 돌고 있으면 자동 시작
+                        if (msg.team_name && !tt.running) {
+                            tt.running = true;
+                            ensureTimerLoop();
+                            sendToTeam(tid, { type: 'timer_control', action: 'start' });
+                            broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                            console.log(`[TIMER] Team ${tid} timer auto-started (team_name set: ${msg.team_name})`);
+                        }
+                        socket.write(JSON.stringify({ type: 'timer_sync', timeRemaining: tt.timeRemaining, running: tt.running }) + '\n');
                     }
                     continue;
                 }
 
                 if (msg.type === 'update_progress' && clientInfo.role === 'node') {
-                    gameState[msg.team_id] = { mission: msg.mission, progress: msg.progress };
+                    const tid = String(msg.team_id);
+                    gameState[tid] = { mission: msg.mission, progress: msg.progress };
                     if (clientInfo.ip && savedNodes[clientInfo.ip]) {
                         savedNodes[clientInfo.ip].mission = msg.mission;
                         savedNodes[clientInfo.ip].progress = msg.progress;
+                    }
+                    // 미션 1 시작 시 해당 팀 타이머 자동 시작
+                    if (msg.mission === 1 && msg.progress === 0) {
+                        const t = getTeamTimer(tid);
+                        if (!t.running) {
+                            t.running = true;
+                            ensureTimerLoop();
+                            sendToTeam(tid, { type: 'timer_control', action: 'start' });
+                            sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: true });
+                            broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                            console.log(`[TIMER] Team ${tid} timer auto-started (mission 1, TCP)`);
+                        }
                     }
                     broadcastToRole('gm', msg);
                     broadcastProgressSync();
@@ -316,6 +452,63 @@ const tcpServer = net.createServer((socket) => {
                         sendToTeam(msg.target, msg);
                         broadcastToRole('gm', msg);
                     }
+                    continue;
+                }
+
+                if (msg.type === 'qr_decode_request') {
+                    // 팀별 QR 중복 요청 방지 (2초 쿨다운)
+                    const qrKey = `qr_${clientInfo.team_id}`;
+                    const now = Date.now();
+                    if (global[qrKey] && now - global[qrKey] < 2000) {
+                        console.log(`[QR] Team ${clientInfo.team_id} 중복 요청 무시 (${now - global[qrKey]}ms)`);
+                        continue;
+                    }
+                    global[qrKey] = now;
+
+                    const imageBase64 = msg.image;
+                    const QR_CORRECT_ANSWER = 'https://m.site.naver.com/263Ew';
+                    let qrResult = '';
+                    let qrStatus = 'invalid'; // 'invalid' | 'wrong' | 'correct'
+                    try {
+                        const imgBuf = Buffer.from(imageBase64, 'base64');
+                        const image = await Jimp.read(imgBuf);
+                        const { width, height, data } = image.bitmap;
+                        const code = jsQR(new Uint8ClampedArray(data), width, height);
+                        if (code && code.data) {
+                            qrResult = code.data;
+                            if (qrResult === QR_CORRECT_ANSWER) {
+                                qrStatus = 'correct';
+                            } else {
+                                qrStatus = 'wrong';
+                            }
+                        } else {
+                            qrStatus = 'invalid';
+                            qrResult = '';
+                        }
+                    } catch (e) {
+                        console.error('[QR] 디코드 에러:', e.message);
+                        qrStatus = 'invalid';
+                    }
+
+                    // 결과를 노드에 반환
+                    socket.write(JSON.stringify({ type: 'qr_decode_result', status: qrStatus, result: qrResult }) + '\n');
+
+                    // GM 로그 메시지 생성
+                    const teamLabel = `T${msg.team_id || '?'}`;
+                    let logText = '';
+                    if (qrStatus === 'correct') {
+                        logText = `[${teamLabel}] ✅ QR 정답! → ${qrResult}`;
+                    } else if (qrStatus === 'wrong') {
+                        logText = `[${teamLabel}] ❌ QR 오답 → ${qrResult}`;
+                    } else {
+                        logText = `[${teamLabel}] ⚠ 유효하지 않은 QR (디코드 실패)`;
+                    }
+                    console.log('[QR]', logText);
+                    broadcastToRole('gm', {
+                        type: 'chat_message', sender: 'system',
+                        team_id: msg.team_id, team_name: msg.team_name || '',
+                        text: logText
+                    });
                     continue;
                 }
             } catch (err) {
@@ -360,33 +553,47 @@ function broadcastProgressSync() {
     for (let [client, info] of tcpClients.entries()) {
         if (info.role === 'node' && info.team_id) {
             const myProgress = gameState[info.team_id] ? gameState[info.team_id].progress : 0;
-            client.write(JSON.stringify({ type: 'progress_sync', my_progress: myProgress, avg_progress: avgProgress }) + '\n');
+            try {
+                if (!client.destroyed) {
+                    client.write(JSON.stringify({ type: 'progress_sync', my_progress: myProgress, avg_progress: avgProgress }) + '\n');
+                }
+            } catch (e) { /* socket already closed */ }
         }
     }
 }
 
-// --- 서버 타이머 ---
+// --- 팀별 타이머 ---
 let serverTimerInterval = null;
-function startServerTimer() {
+function ensureTimerLoop() {
     if (serverTimerInterval) return;
     serverTimerInterval = setInterval(() => {
-        if (timerState.running && timerState.timeRemaining > 0) {
-            timerState.timeRemaining--;
-            // 매 초 GM에게 동기화
-            broadcastToRole('gm', { type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: true });
-            // 10초마다 노드에도 동기화
-            if (timerState.timeRemaining % 10 === 0) {
-                broadcastToRole('node', { type: 'timer_sync', timeRemaining: timerState.timeRemaining, running: true });
+        let anyRunning = false;
+        for (const tid of Object.keys(teamTimers)) {
+            const t = teamTimers[tid];
+            if (t.running && t.timeRemaining > 0) {
+                t.timeRemaining--;
+                anyRunning = true;
+                // 10초마다 해당 팀 노드에 동기화
+                if (t.timeRemaining % 10 === 0) {
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: true });
+                }
+                if (t.timeRemaining <= 0) {
+                    t.running = false;
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: 0, running: false });
+                }
             }
-        } else if (timerState.timeRemaining <= 0) {
-            timerState.running = false;
-            stopServerTimer();
-            broadcastAll({ type: 'timer_sync', timeRemaining: 0, running: false });
+        }
+        // 매 초 GM에게 모든 팀 타이머 동기화
+        broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+        if (!anyRunning) {
+            clearInterval(serverTimerInterval);
+            serverTimerInterval = null;
         }
     }, 1000);
 }
-function stopServerTimer() {
-    if (serverTimerInterval) { clearInterval(serverTimerInterval); serverTimerInterval = null; }
+function getTeamTimer(tid) {
+    if (!teamTimers[tid]) teamTimers[tid] = { timeRemaining: TIMER_INITIAL, running: false };
+    return teamTimers[tid];
 }
 
 // 3. 서버 실행

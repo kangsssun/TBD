@@ -33,6 +33,9 @@ public:
     /** Reset to story screen (for re-entry). */
     void resetToStory();
 
+    /** Set QR fallback submit callback */
+    void setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb);
+
 signals:
     void missionCompleted(int missionNumber);
     void missionFailed(int missionNumber);
@@ -88,6 +91,10 @@ private:
     bool m_mission3CaptureInProgress;
     bool m_mission3PendingStop;
     QString m_mission3CapturedImagePath;
+    qint64 m_mission3LastCameraAttemptMs;
+
+    // QR fallback callback (Mission 3)
+    std::function<void(const QByteArray &imageData, const std::function<void(const QString &status, const QString &result)> &callback)> m_qrSubmitCb;
 
     static bool s_operatorMode;
 };

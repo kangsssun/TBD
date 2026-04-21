@@ -47,7 +47,7 @@
             background: var(--bg-panel); border: 1px solid rgba(0,255,157,0.15); border-radius: 6px;
             transition: all 0.5s cubic-bezier(0.4,0,0.2,1);
             position: relative; overflow: hidden;
-            display: grid; grid-template-columns: 180px 1fr 80px auto; align-items: center; gap: 14px; padding: 16px 20px;
+            display: grid; grid-template-columns: 180px 1fr 90px 80px auto; align-items: center; gap: 14px; padding: 16px 20px;
         }
         .team-card-wide::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,var(--neon-mint),var(--neon-cyan)); }
         .team-card-wide:hover { border-color:var(--neon-mint); box-shadow:0 0 20px rgba(0,255,157,0.1); }
@@ -90,11 +90,15 @@
         <div class="flex items-center gap-8">
             <div class="text-center"><div class="status-label mb-1">NODES</div><div class="text-2xl text-white font-bold" style="font-family:'Orbitron',sans-serif;" id="hdr-nodes">0 / 0</div></div>
             <div class="text-center"><div class="status-label mb-1">AVG PROGRESS</div><div class="text-2xl font-bold" style="font-family:'Orbitron',sans-serif;color:var(--neon-cyan);" id="hdr-avg">0%</div></div>
-            <div class="text-center"><div class="status-label mb-1">REMAINING</div><div class="timer-display" id="main-timer">45:00</div></div>
-            <div class="flex flex-col gap-2">
-                <button class="btn-action" onclick="startTimer()">▶ START</button>
-                <button class="btn-danger" onclick="pauseTimer()">⏸ PAUSE</button>
-                <button class="btn-action" onclick="resetTimer()" style="font-size:0.6rem;">↺ RESET</button>
+            <div class="flex items-center gap-3">
+                <select id="timer-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white);font-family:'Orbitron',sans-serif;">
+                    <option value="ALL">ALL TEAMS</option>
+                </select>
+                <div class="flex flex-col gap-1">
+                    <button class="btn-action text-xs" onclick="startTimer()">▶ START</button>
+                    <button class="btn-danger text-xs" onclick="pauseTimer()">⏸ PAUSE</button>
+                    <button class="btn-action text-xs" onclick="resetTimer()" style="font-size:0.55rem;">↺ RESET</button>
+                </div>
             </div>
         </div>
     </header>
@@ -111,7 +115,7 @@
             <div class="col-span-4 flex flex-col gap-4">
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">COMMUNICATION LOG</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div><div class="log-panel rounded p-2" id="log-panel"><div class="log-entry" style="color:var(--warn-yellow)">[SYSTEM] 다중 통신 모듈 초기화 완료</div></div></div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">GM BROADCAST</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
-                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="메시지..."><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
+                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="메시지 또는 커맨드 (T1 move mission 3, T2 skip, T1 hint ...)"><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
                 </div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">QUICK ACTIONS</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
                     <div class="grid grid-cols-2 gap-2">
@@ -135,8 +139,8 @@
     <script>
         let gmSocket = null;
         let activeNodes = {};
-        let gmTimerSeconds = 45 * 60;
-        let gmTimerRunning = false;
+        let teamTimers = {}; // { tid: { timeRemaining, running } }
+        const TIMER_INITIAL = 45 * 60;
         const TOTAL_MISSIONS = 5;
         const clearOrder = [];
 
@@ -190,21 +194,23 @@
                 });
                 renderAll();
             }
-            else if (data.type === 'timer_sync') { gmTimerSeconds = data.timeRemaining; gmTimerRunning = data.running; updateTimerUI(); }
+            else if (data.type === 'all_timers') { teamTimers = data.timers || {}; renderAll(); }
+            else if (data.type === 'timer_sync') { if(data.team_id) { teamTimers[data.team_id] = { timeRemaining: data.timeRemaining, running: data.running }; updateTimerUI(); } }
         }
 
         function checkCleared(tid) {
             const t = activeNodes[tid];
             if (t && t.progress >= 100 && !t.cleared) {
                 t.cleared = true;
-                const elapsed = (45 * 60) - gmTimerSeconds;
+                const tt = teamTimers[tid] || { timeRemaining: TIMER_INITIAL };
+                const elapsed = TIMER_INITIAL - tt.timeRemaining;
                 t.clearTime = `${Math.floor(elapsed/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`;
                 if (!clearOrder.includes(tid)) clearOrder.push(tid);
                 addChatLog('SYSTEM', `T${tid}`, `🎉 T${tid} (${t.name}) ALL CLEAR!`);
             }
         }
 
-        function renderAll() { renderTeamList(); renderHeader(); renderRanking(); updateTargetSelect(); }
+        function renderAll() { renderTeamList(); renderHeader(); renderRanking(); updateTargetSelect(); updateTimerUI(); }
 
         function renderHeader() {
             const tids = Object.keys(activeNodes);
@@ -230,7 +236,10 @@
                 const steps = buildSteps(t), progress = t.progress||0;
                 const esc = t.name.replace(/'/g,"\\'");
                 const rightBtn = clr ? `<div class="text-center text-[10px] border rounded py-2 px-3 whitespace-nowrap" style="color:var(--neon-cyan);border-color:rgba(0,229,255,0.3)">🏆 ${t.clearTime}</div>` : (off?'<div></div>':`<div class="flex flex-col gap-1"><button class="btn-danger text-[10px] py-2 px-3 whitespace-nowrap" onclick="openFinalAuthModal('${tid}','${esc}')">🏁 퇴실</button><button class="btn-action text-[10px] py-1 px-3 whitespace-nowrap" onclick="resetTeam('${tid}','${esc}')" style="font-size:0.55rem;">↺ RESET</button></div>`);
-                return `<div class="team-card-wide ${cls}"><div><div class="flex items-center gap-2 mb-1"><div class="w-2.5 h-2.5 rounded-full" style="${dotStyle}"></div><span class="font-bold text-sm" style="${nameStyle}">T${tid} ${t.name}</span></div>${rank}<div class="text-xs mt-1" style="font-family:'Orbitron',sans-serif;color:${mColor};">${mText}</div></div><div><div class="step-track mb-2">${steps}</div><div class="progress-bar-wrapper"><div class="progress-bg"><div class="progress-fill" style="width:${progress}%;background:var(--neon-cyan);box-shadow:0 0 6px rgba(0,229,255,0.3);"></div></div></div></div><div class="pct-big" style="color:${clr?'var(--neon-cyan)':'var(--neon-mint)'}">${progress}%</div>${rightBtn}</div>`;
+                const tt = teamTimers[tid]; const timerSec = tt?tt.timeRemaining:TIMER_INITIAL; const timerRun = tt?tt.running:false;
+                const timerColor = timerRun?'var(--crimson)':'var(--text-muted)'; const timerWarn = timerSec<5*60?'warning':'';
+                const timerHtml = `<div id="timer-${tid}" class="timer-display ${timerWarn}" style="font-size:1.1rem;color:${timerColor}">${fmtTimer(timerSec)}</div><div class="text-[9px]" style="color:var(--text-muted)">${timerRun?'▶ RUNNING':'⏸ PAUSED'}</div>`;
+                return `<div class="team-card-wide ${cls}"><div><div class="flex items-center gap-2 mb-1"><div class="w-2.5 h-2.5 rounded-full" style="${dotStyle}"></div><span class="font-bold text-sm" style="${nameStyle}">T${tid} ${t.name}</span></div>${rank}<div class="text-xs mt-1" style="font-family:'Orbitron',sans-serif;color:${mColor};">${mText}</div></div><div><div class="step-track mb-2">${steps}</div><div class="progress-bar-wrapper"><div class="progress-bg"><div class="progress-fill" style="width:${progress}%;background:var(--neon-cyan);box-shadow:0 0 6px rgba(0,229,255,0.3);"></div></div></div></div><div class="text-center">${timerHtml}</div><div class="pct-big" style="color:${clr?'var(--neon-cyan)':'var(--neon-mint)'}">${progress}%</div>${rightBtn}</div>`;
             }).join('');
         }
 
@@ -246,23 +255,35 @@
         }
 
         function updateTargetSelect() {
-            const s=document.getElementById('msg-target'), tids=Object.keys(activeNodes).filter(tid=>activeNodes[tid].status!=='disconnected');
+            const tids=Object.keys(activeNodes).filter(tid=>activeNodes[tid].status!=='disconnected');
+            const s=document.getElementById('msg-target');
+            const prevMsg = s.value;
             s.innerHTML='<option value="ALL">ALL</option>'; tids.forEach(tid=>{s.innerHTML+=`<option value="${tid}">T${tid} ${activeNodes[tid].name}</option>`;});
+            if([...s.options].some(o=>o.value===prevMsg)) s.value=prevMsg;
+            const ts=document.getElementById('timer-target');
+            if(ts){ const prevTmr=ts.value; ts.innerHTML='<option value="ALL">ALL</option>'; tids.forEach(tid=>{ts.innerHTML+=`<option value="${tid}">T${tid} ${activeNodes[tid].name}</option>`;}); if([...ts.options].some(o=>o.value===prevTmr)) ts.value=prevTmr; }
         }
 
+        function fmtTimer(sec) { const m=Math.floor(sec/60).toString().padStart(2,'0'), s=(sec%60).toString().padStart(2,'0'); return `${m}:${s}`; }
         function updateTimerUI() {
-            const m=Math.floor(gmTimerSeconds/60).toString().padStart(2,'0'), s=(gmTimerSeconds%60).toString().padStart(2,'0'), el=document.getElementById('main-timer');
-            el.innerText=`${m}:${s}`; if(gmTimerSeconds<5*60)el.classList.add('warning'); else el.classList.remove('warning');
+            // 팀 카드 내 타이머 갱신
+            Object.keys(activeNodes).forEach(tid => {
+                const el = document.getElementById('timer-'+tid);
+                if(!el) return;
+                const tt = teamTimers[tid];
+                if(tt) { el.innerText = fmtTimer(tt.timeRemaining); if(tt.timeRemaining<5*60) el.classList.add('warning'); else el.classList.remove('warning'); }
+                else { el.innerText = '45:00'; el.classList.remove('warning'); }
+            });
         }
 
-        function startTimer() { if(!gmSocket||gmTimerRunning)return; gmSocket.send(JSON.stringify({type:'timer_control',action:'start'})); addChatLog('SYSTEM','ALL','▶ Timer Started'); }
-        function pauseTimer() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'timer_control',action:'pause'})); addChatLog('SYSTEM','ALL','⏸ Timer Paused'); }
-        function resetTimer() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'timer_control',action:'reset'})); gmTimerSeconds=45*60; updateTimerUI(); addChatLog('SYSTEM','ALL','↺ Timer Reset'); }
+        function startTimer() { if(!gmSocket)return; const tid=document.getElementById('timer-target').value; gmSocket.send(JSON.stringify({type:'timer_control',action:'start',team_id:tid})); addChatLog('SYSTEM',tid==='ALL'?'ALL':`T${tid}`,`▶ Timer Started`); }
+        function pauseTimer() { if(!gmSocket)return; const tid=document.getElementById('timer-target').value; gmSocket.send(JSON.stringify({type:'timer_control',action:'pause',team_id:tid})); addChatLog('SYSTEM',tid==='ALL'?'ALL':`T${tid}`,`⏸ Timer Paused`); }
+        function resetTimer() { if(!gmSocket)return; const tid=document.getElementById('timer-target').value; gmSocket.send(JSON.stringify({type:'timer_control',action:'reset',team_id:tid})); addChatLog('SYSTEM',tid==='ALL'?'ALL':`T${tid}`,`↺ Timer Reset`); }
 
         function getTimestamp() { return new Date().toLocaleTimeString('ko-KR',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
         function addChatLog(sender, target, text) {
             const panel=document.getElementById('log-panel'), time=getTimestamp();
-            let color='color:var(--neon-mint)'; if(sender==='GM')color='color:var(--neon-cyan)'; else if(sender==='SYSTEM')color='color:var(--warn-yellow)';
+            let color='color:var(--neon-mint)'; if(sender==='GM')color='color:var(--neon-cyan)'; else if(sender==='SYSTEM')color='color:var(--warn-yellow)'; else if(sender==='CMD')color='color:#ff6bff';
             panel.innerHTML+=`<div class="log-entry" style="${color}"><span style="color:var(--text-muted);font-size:10px">[${time}]</span> [${sender} → ${target==='ALL'?'[ALL]':'['+target+']'}] ${text}</div>`;
             panel.scrollTop=panel.scrollHeight;
         }
@@ -270,13 +291,51 @@
         function sendGmMessage() {
             const target=document.getElementById('msg-target').value, text=document.getElementById('gm-msg-input').value.trim();
             if(!text||!gmSocket)return;
-            gmSocket.send(JSON.stringify({type:'chat_message',sender:'gm',target:target,text:text}));
             document.getElementById('gm-msg-input').value='';
+
+            // --- GM 관리자 커맨드 파싱 ---
+            const cmdMatch = text.match(/^T(\d+)\s+(move\s+mission|skip|pause|resume|set\s+progress|hint)\s*(.*)$/i);
+            if (cmdMatch) {
+                const cmdTeam = cmdMatch[1];
+                const cmdAction = cmdMatch[2].toLowerCase().replace(/\s+/g,'_');
+                const cmdArg = cmdMatch[3].trim();
+
+                if (cmdAction === 'move_mission') {
+                    const mission = parseInt(cmdArg);
+                    if (mission >= 1 && mission <= 5) {
+                        gmSocket.send(JSON.stringify({type:'gm_command',command:'move_mission',team_id:cmdTeam,mission:mission}));
+                        addChatLog('CMD',`T${cmdTeam}`,`⚙ 미션 ${mission}로 강제 이동`);
+                    } else { addChatLog('SYSTEM','GM','❌ 미션 번호는 1~5'); }
+                } else if (cmdAction === 'skip') {
+                    gmSocket.send(JSON.stringify({type:'gm_command',command:'skip_mission',team_id:cmdTeam}));
+                    addChatLog('CMD',`T${cmdTeam}`,`⚙ 현재 미션 스킵`);
+                } else if (cmdAction === 'pause') {
+                    gmSocket.send(JSON.stringify({type:'gm_command',command:'pause_team',team_id:cmdTeam}));
+                    addChatLog('CMD',`T${cmdTeam}`,`⏸ 팀 일시정지`);
+                } else if (cmdAction === 'resume') {
+                    gmSocket.send(JSON.stringify({type:'gm_command',command:'resume_team',team_id:cmdTeam}));
+                    addChatLog('CMD',`T${cmdTeam}`,`▶ 팀 재개`);
+                } else if (cmdAction === 'set_progress') {
+                    const pct = parseInt(cmdArg);
+                    if (pct >= 0 && pct <= 100) {
+                        gmSocket.send(JSON.stringify({type:'gm_command',command:'set_progress',team_id:cmdTeam,progress:pct}));
+                        addChatLog('CMD',`T${cmdTeam}`,`⚙ 진행도 ${pct}%로 설정`);
+                    } else { addChatLog('SYSTEM','GM','❌ 진행도는 0~100'); }
+                } else if (cmdAction === 'hint') {
+                    const hintText = cmdArg || '힌트를 확인하세요!';
+                    gmSocket.send(JSON.stringify({type:'gm_command',command:'send_hint',team_id:cmdTeam,hint:hintText}));
+                    addChatLog('CMD',`T${cmdTeam}`,`💡 힌트: ${hintText}`);
+                }
+                return;
+            }
+
+            // 일반 메시지
+            gmSocket.send(JSON.stringify({type:'chat_message',sender:'gm',target:target,text:text}));
             addChatLog('GM',target==='ALL'?'ALL':`T${target}`,text);
         }
 
         function playBaseMelody() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'chat_message',sender:'gm',target:'ALL',text:'🔊 기준 멜로디(도-레-미-파-솔) 전송됨'})); addChatLog('GM','ALL','🔊 기준 멜로디 전송'); }
-        function emergencyAllPause() { pauseTimer(); addChatLog('SYSTEM','ALL','⚠ 전체 노드 강제 일시정지'); }
+        function emergencyAllPause() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'timer_control',action:'pause',team_id:'ALL'})); addChatLog('SYSTEM','ALL','⚠ 전체 노드 강제 일시정지'); }
 
         function resetTeam(teamId, teamName) {
             if (!confirm(`[T${teamId} ${teamName}] 팀을 리셋하시겠습니까?\n진행도가 초기화되고 팀명 입력부터 다시 시작됩니다.`)) return;
