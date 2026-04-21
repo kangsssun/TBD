@@ -12,11 +12,6 @@
 #include <QPauseAnimation>
 #include <QEasingCurve>
 #include <QTimer>
-#include <QProcess>
-#include <QProcessEnvironment>
-#include <QDir>
-#include <QFileInfo>
-#include <QCoreApplication>
 
 EmergencyPage::EmergencyPage(QWidget *parent)
     : QWidget(parent)
@@ -30,11 +25,8 @@ EmergencyPage::EmergencyPage(QWidget *parent)
     , m_pulseAnim(nullptr)
     , m_storyTimer(nullptr)
     , m_confirmButton(nullptr)
-    , m_audioProcess(new QProcess(this))
-    , m_musicStarted(false)
 {
     setupUi();
-    setupAlsaEnvironment();
 }
 
 void EmergencyPage::setupUi()
@@ -250,7 +242,6 @@ void EmergencyPage::setupUi()
 
     // ── Connections ────────────────────────────────────────────────────
     QObject::connect(m_confirmButton, &QPushButton::clicked, this, [this]() {
-        stopMusic();
         emit confirmed();
     });
 
@@ -290,100 +281,4 @@ void EmergencyPage::reset()
     m_confirmButton->setStyleSheet(m_confirmStyle);
     m_confirmButton->setEnabled(true);
     m_confirmButton->setCursor(Qt::PointingHandCursor);
-
-    playEmergencyMusic();
-}
-
-void EmergencyPage::stopMusic()
-{
-    m_musicStarted = false;
-    if (m_audioProcess->state() != QProcess::NotRunning) {
-        m_audioProcess->terminate();
-        if (!m_audioProcess->waitForFinished(1500)) {
-            m_audioProcess->kill();
-            m_audioProcess->waitForFinished(1000);
-        }
-    }
-}
-
-void EmergencyPage::setupAlsaEnvironment()
-{
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-
-    env.insert(QStringLiteral("ALSA_CONFIG_PATH"),
-               QStringLiteral("/mnt/nfs/alsa-lib/share/alsa/alsa.conf"));
-
-    QString ldPath = env.value(QStringLiteral("LD_LIBRARY_PATH"));
-    const QStringList alsaLibPaths = {
-        QStringLiteral("/mnt/nfs/alsa-lib/lib"),
-        QStringLiteral("/mnt/nfs/alsa-lib/lib/alsa-lib"),
-        QStringLiteral("/mnt/nfs/alsa-lib/lib/alsa-lib/smixer")
-    };
-    for (const QString &p : alsaLibPaths) {
-        if (!ldPath.contains(p)) {
-            if (!ldPath.isEmpty()) ldPath += QLatin1Char(':');
-            ldPath += p;
-        }
-    }
-    env.insert(QStringLiteral("LD_LIBRARY_PATH"), ldPath);
-
-    m_audioProcess->setProcessEnvironment(env);
-}
-
-QString EmergencyPage::findEmergencyWav() const
-{
-    const QStringList baseDirs = {
-        QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/songs")),
-        QStringLiteral("/mnt/nfs/songs")
-    };
-
-    for (const QString &dirPath : baseDirs) {
-        const QString filePath = QDir::cleanPath(dirPath + QStringLiteral("/emergency.wav"));
-        if (QFileInfo::exists(filePath)) {
-            return filePath;
-        }
-    }
-
-    return QString();
-}
-
-QString EmergencyPage::findAplayProgram() const
-{
-    const QStringList candidates = {
-        QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/aplay")),
-        QStringLiteral("/mnt/nfs/aplay"),
-        QStringLiteral("aplay")
-    };
-
-    for (const QString &candidate : candidates) {
-        if (candidate == QStringLiteral("aplay") || QFileInfo::exists(candidate)) {
-            return candidate;
-        }
-    }
-
-    return QStringLiteral("aplay");
-}
-
-void EmergencyPage::playEmergencyMusic()
-{
-    if (m_musicStarted) {
-        return;
-    }
-
-    const QString wavFile = findEmergencyWav();
-    if (wavFile.isEmpty()) {
-        return;
-    }
-
-    if (m_audioProcess->state() != QProcess::NotRunning) {
-        m_audioProcess->terminate();
-        if (!m_audioProcess->waitForFinished(1500)) {
-            m_audioProcess->kill();
-            m_audioProcess->waitForFinished(1000);
-        }
-    }
-
-    const QString aplay = findAplayProgram();
-    m_audioProcess->start(aplay, { QStringLiteral("-Dhw:0,0"), wavFile });
-    m_musicStarted = m_audioProcess->waitForStarted(800);
 }

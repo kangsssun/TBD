@@ -3,7 +3,6 @@
 
 #include <QWidget>
 
-class QProcess;
 class QPushButton;
 class QStackedLayout;
 class QGraphicsOpacityEffect;
@@ -19,17 +18,12 @@ public:
     explicit EmergencyPage(QWidget *parent = nullptr);
 
     void reset();   // restart from story screen
-    void stopMusic();
 
 signals:
     void confirmed();   // emitted when confirm button is clicked
 
 private:
     void setupUi();
-    void setupAlsaEnvironment();
-    void playEmergencyMusic();
-    QString findEmergencyWav() const;
-    QString findAplayProgram() const;
 
     QStackedLayout *m_stack;
     QWidget *m_storyLayer;
@@ -46,9 +40,6 @@ private:
 
     QPushButton *m_confirmButton;
     QString m_confirmStyle;
-
-    QProcess *m_audioProcess;
-    bool m_musicStarted;
 };
 
 #endif // EMERGENCYPAGE_H
