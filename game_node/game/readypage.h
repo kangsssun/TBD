@@ -33,6 +33,10 @@ public:
     void setMissionProgress(int percent);
     void setGlobalProgress(int percent);
 
+signals:
+    void gmMessageReceived(const QString &text);
+
+public:
     void setSendMessageCallback(const std::function<void(const QString &)> &cb);
     void setProgressUpdateCallback(const std::function<void(int missionNumber, int progress)> &cb);
     void setQrSubmitCallback(const std::function<void(const QByteArray &, const std::function<void(const QString &, const QString &)> &)> &cb);

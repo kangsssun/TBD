@@ -34,8 +34,8 @@ GameNode::GameNode(QWidget *parent)
     , m_blinkTimer(new QTimer(this))
     , m_teamDialogOpen(false)
     , m_ignoreTitleTap(false)
-    , m_titleAudioProcess(new QProcess(this))
     , m_teamId(1)
+    , m_titleAudioProcess(new QProcess(this))
     , m_titleMusicStarted(false)
     , m_operatorMode(false)
     , m_serverIp(QStringLiteral("192.168.10.10"))
@@ -933,29 +933,23 @@ void GameNode::playTitleMusicIfNeeded()
     }
 
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
-        m_titleAudioProcess->terminate();
-        if (!m_titleAudioProcess->waitForFinished(1500)) {
-            m_titleAudioProcess->kill();
-            m_titleAudioProcess->waitForFinished(1000);
-        }
+        m_titleAudioProcess->kill();
+        // 비동기: 끝나면 finished 시그널에서 다시 호출됨
+        return;
     }
 
     const QString aplay = findAplayProgram();
     const QStringList args = { QStringLiteral("-Dhw:0,0"), songFile };
 
     m_titleAudioProcess->start(aplay, args);
-    m_titleMusicStarted = m_titleAudioProcess->waitForStarted(800);
+    m_titleMusicStarted = true;
 }
 
 void GameNode::stopTitleMusic()
 {
     m_titleMusicStarted = false;
     if (m_titleAudioProcess->state() != QProcess::NotRunning) {
-        m_titleAudioProcess->terminate();
-        if (!m_titleAudioProcess->waitForFinished(1500)) {
-            m_titleAudioProcess->kill();
-            m_titleAudioProcess->waitForFinished(1000);
-        }
+        m_titleAudioProcess->kill();
     }
 }
 

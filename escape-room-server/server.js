@@ -398,6 +398,15 @@ const tcpServer = net.createServer((socket) => {
                 }
 
                 if (msg.type === 'qr_decode_request') {
+                    // 팀별 QR 중복 요청 방지 (2초 쿨다운)
+                    const qrKey = `qr_${clientInfo.team_id}`;
+                    const now = Date.now();
+                    if (global[qrKey] && now - global[qrKey] < 2000) {
+                        console.log(`[QR] Team ${clientInfo.team_id} 중복 요청 무시 (${now - global[qrKey]}ms)`);
+                        continue;
+                    }
+                    global[qrKey] = now;
+
                     const imageBase64 = msg.image;
                     const QR_CORRECT_ANSWER = 'https://m.site.naver.com/263Ew';
                     let qrResult = '';

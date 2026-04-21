@@ -103,6 +103,7 @@ void ReadyPage::addGmDirectMessage(const QString &text)
         m_contactGmButton->setStyleSheet(QStringLiteral(
             "QPushButton#contactGmButton { border: 2px solid #ef4444; color: #ef4444; }"));
     }
+    emit gmMessageReceived(text);
 }
 
 void ReadyPage::setMissionProgress(int percent)
@@ -247,7 +248,11 @@ void ReadyPage::setupUi()
         m_unreadMessages = 0;
         m_contactGmButton->setText(QStringLiteral("CONTACT GM"));
         m_contactGmButton->setStyleSheet(QString());
-        ContactGmDialog::show(this, m_teamName, m_directMessages, m_sendMessageCb);
+        ContactGmDialog::show(this, m_teamName, m_directMessages, [this](const QString &text) {
+            // 보낸 메시지도 히스토리에 저장
+            m_directMessages.append(QStringLiteral("[ME] ") + text);
+            if (m_sendMessageCb) m_sendMessageCb(text);
+        });
     });
 
     auto *helpButton = new QPushButton(QStringLiteral("GUIDE"), headerButtonArea);

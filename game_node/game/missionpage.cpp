@@ -1984,10 +1984,15 @@ void MissionPage::setupMission3()
         resetButtonHoverState(btnReset);
     });
 
-    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus]() {
+    QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, captureStatus, btnSubmit]() {
+        // 중복 제출 방지
+        if (!btnSubmit->isEnabled()) return;
+        btnSubmit->setEnabled(false);
+
         // 촬영된 이미지가 없으면 제출 불가
         if (m_mission3CapturedImagePath.isEmpty()) {
             captureStatus->setText(QStringLiteral("제출할 캡처 이미지를 먼저 촬영하세요."));
+            btnSubmit->setEnabled(true);
             return;
         }
 
@@ -1995,6 +2000,7 @@ void MissionPage::setupMission3()
         QFile imgFile(m_mission3CapturedImagePath);
         if (!imgFile.open(QIODevice::ReadOnly)) {
             captureStatus->setText(QStringLiteral("이미지 파일을 읽을 수 없습니다."));
+            btnSubmit->setEnabled(true);
             return;
         }
         QByteArray imageData = imgFile.readAll();
@@ -2002,14 +2008,16 @@ void MissionPage::setupMission3()
 
         if (imageData.isEmpty()) {
             captureStatus->setText(QStringLiteral("이미지 파일이 비어있습니다."));
+            btnSubmit->setEnabled(true);
             return;
         }
 
         captureStatus->setText(QStringLiteral("QR 이미지를 서버로 전송 중..."));
 
         if (m_qrSubmitCb) {
-            m_qrSubmitCb(imageData, [this, captureStatus](const QString &status, const QString &result) {
-                QMetaObject::invokeMethod(this, [this, captureStatus, status, result]() {
+            m_qrSubmitCb(imageData, [this, captureStatus, btnSubmit](const QString &status, const QString &result) {
+                QMetaObject::invokeMethod(this, [this, captureStatus, btnSubmit, status, result]() {
+                    btnSubmit->setEnabled(true);
                     if (status == QStringLiteral("correct")) {
                         captureStatus->setText(QStringLiteral("✅ 정답! QR 인증 성공"));
                         showResultPopup(true);
@@ -2017,7 +2025,6 @@ void MissionPage::setupMission3()
                         captureStatus->setText(QStringLiteral("❌ 오답: ") + result);
                         showResultPopup(false);
                     } else {
-                        // invalid
                         captureStatus->setText(QStringLiteral("⚠ 유효하지 않은 QR입니다. 다시 촬영해주세요."));
                         showResultPopup(false);
                     }
@@ -2025,6 +2032,7 @@ void MissionPage::setupMission3()
             });
         } else {
             captureStatus->setText(QStringLiteral("서버 연결이 필요합니다."));
+            btnSubmit->setEnabled(true);
         }
     });
 
