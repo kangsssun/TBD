@@ -152,6 +152,26 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
+        // C-2. 이벤트 상태 (노드→GM)
+        if (data.type === 'event_status') {
+            const tid = String(data.team_id || clientInfo.team_id);
+            console.log(`[EVENT] Team ${tid}: ${data.event} → ${data.status}`);
+            broadcastToRole('gm', { type: 'event_status', team_id: tid, team_name: data.team_name || '', event: data.event, status: data.status });
+            return;
+        }
+
+        // C-3. 타이머 감소 패널티 (노드→서버)
+        if (data.type === 'timer_penalty') {
+            const tid = String(data.team_id || clientInfo.team_id);
+            const penalty = data.seconds || 60;
+            const t = getTeamTimer(tid);
+            t.timeRemaining = Math.max(0, t.timeRemaining - penalty);
+            console.log(`[TIMER] Team ${tid} penalty -${penalty}s → ${t.timeRemaining}s remaining`);
+            sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: t.running });
+            broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+            return;
+        }
+
         // D. GM 강제 제어 명령
         if (data.type === 'force_clear' && clientInfo.role === 'gm') {
             sendToTeam(data.target_team, data);
@@ -452,6 +472,32 @@ const tcpServer = net.createServer((socket) => {
                         sendToTeam(msg.target, msg);
                         broadcastToRole('gm', msg);
                     }
+                    continue;
+                }
+
+                // 이벤트 상태 (GM에 전달)
+                if (msg.type === 'event_status') {
+                    const tid = String(msg.team_id || clientInfo.team_id);
+                    console.log(`[EVENT] Team ${tid}: ${msg.event} → ${msg.status}`);
+                    broadcastToRole('gm', {
+                        type: 'event_status',
+                        team_id: tid,
+                        team_name: msg.team_name || '',
+                        event: msg.event,
+                        status: msg.status
+                    });
+                    continue;
+                }
+
+                // 타이머 감소 패널티
+                if (msg.type === 'timer_penalty') {
+                    const tid = String(msg.team_id || clientInfo.team_id);
+                    const penalty = msg.seconds || 60;
+                    const t = getTeamTimer(tid);
+                    t.timeRemaining = Math.max(0, t.timeRemaining - penalty);
+                    console.log(`[TIMER] Team ${tid} penalty -${penalty}s → ${t.timeRemaining}s remaining`);
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: t.running });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
                     continue;
                 }
 

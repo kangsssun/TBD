@@ -196,6 +196,19 @@
             }
             else if (data.type === 'all_timers') { teamTimers = data.timers || {}; renderAll(); }
             else if (data.type === 'timer_sync') { if(data.team_id) { teamTimers[data.team_id] = { timeRemaining: data.timeRemaining, running: data.running }; updateTimerUI(); } }
+            else if (data.type === 'event_status') {
+                const tid = data.team_id;
+                if (activeNodes[tid]) {
+                    if (data.status === 'started') {
+                        activeNodes[tid].eventActive = data.event;
+                        addChatLog('SYSTEM', `T${tid}`, `🚨 T${tid} 긴급 이벤트 시작: ${data.event}`);
+                    } else {
+                        activeNodes[tid].eventActive = null;
+                        addChatLog('SYSTEM', `T${tid}`, `✅ T${tid} 이벤트 완료: ${data.event}`);
+                    }
+                    renderAll();
+                }
+            }
         }
 
         function checkCleared(tid) {
@@ -232,6 +245,7 @@
                 const nameStyle = off?'color:var(--text-muted)':'color:var(--text-white)';
                 const mColor = clr?'var(--neon-cyan)':(off?'var(--text-muted)':'var(--crimson)');
                 const mText = clr?'ALL CLEAR':(off?'WAITING':`MISSION ${t.mission||1}`);
+                const alertBadge = t.eventActive ? `<div style="display:inline-block;background:#ff2222;color:#fff;font-size:10px;font-weight:900;padding:2px 8px;border-radius:4px;margin-left:6px;animation:timer-blink 0.8s infinite;">🚨 ALERT</div>` : '';
                 let rank=''; if(clr) rank=`<div class="rank-badge" style="background:rgba(0,229,255,0.1);color:var(--neon-cyan);border:1px solid rgba(0,229,255,0.3);">🏆 ${t.clearTime}</div>`; else if(!off) rank=`<div class="rank-badge" style="background:rgba(0,255,157,0.05);color:var(--text-muted);">#${idx+1}</div>`;
                 const steps = buildSteps(t), progress = t.progress||0;
                 const esc = t.name.replace(/'/g,"\\'");
@@ -239,7 +253,7 @@
                 const tt = teamTimers[tid]; const timerSec = tt?tt.timeRemaining:TIMER_INITIAL; const timerRun = tt?tt.running:false;
                 const timerColor = timerRun?'var(--crimson)':'var(--text-muted)'; const timerWarn = timerSec<5*60?'warning':'';
                 const timerHtml = `<div id="timer-${tid}" class="timer-display ${timerWarn}" style="font-size:1.1rem;color:${timerColor}">${fmtTimer(timerSec)}</div><div class="text-[9px]" style="color:var(--text-muted)">${timerRun?'▶ RUNNING':'⏸ PAUSED'}</div>`;
-                return `<div class="team-card-wide ${cls}"><div><div class="flex items-center gap-2 mb-1"><div class="w-2.5 h-2.5 rounded-full" style="${dotStyle}"></div><span class="font-bold text-sm" style="${nameStyle}">T${tid} ${t.name}</span></div>${rank}<div class="text-xs mt-1" style="font-family:'Orbitron',sans-serif;color:${mColor};">${mText}</div></div><div><div class="step-track mb-2">${steps}</div><div class="progress-bar-wrapper"><div class="progress-bg"><div class="progress-fill" style="width:${progress}%;background:var(--neon-cyan);box-shadow:0 0 6px rgba(0,229,255,0.3);"></div></div></div></div><div class="text-center">${timerHtml}</div><div class="pct-big" style="color:${clr?'var(--neon-cyan)':'var(--neon-mint)'}">${progress}%</div>${rightBtn}</div>`;
+                return `<div class="team-card-wide ${cls}"><div><div class="flex items-center gap-2 mb-1"><div class="w-2.5 h-2.5 rounded-full" style="${dotStyle}"></div><span class="font-bold text-sm" style="${nameStyle}">T${tid} ${t.name}</span></div>${rank}<div class="text-xs mt-1" style="font-family:'Orbitron',sans-serif;color:${mColor};">${mText}${alertBadge}</div></div><div><div class="step-track mb-2">${steps}</div><div class="progress-bar-wrapper"><div class="progress-bg"><div class="progress-fill" style="width:${progress}%;background:var(--neon-cyan);box-shadow:0 0 6px rgba(0,229,255,0.3);"></div></div></div></div><div class="text-center">${timerHtml}</div><div class="pct-big" style="color:${clr?'var(--neon-cyan)':'var(--neon-mint)'}">${progress}%</div>${rightBtn}</div>`;
             }).join('');
         }
 

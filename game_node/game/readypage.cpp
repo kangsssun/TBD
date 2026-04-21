@@ -13,6 +13,10 @@
 #include <QFont>
 #include <QDialog>
 #include <QScrollArea>
+#include <QApplication>
+#include <QScreen>
+#include <QJsonObject>
+#include <QDebug>
 
 ReadyPage::ReadyPage(QWidget *parent)
     : QWidget(parent)
@@ -168,6 +172,15 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
             auto *nextMission = new MissionPage(completedNumber + 1, this);
             setMissionWidget(nextMission);
             nextMission->startMission();
+        });
+
+        // 미션3 문제 화면 표시 5초 후 이벤트 1 트리거
+        QObject::connect(mission, &MissionPage::missionProblemShown, this, [this](int mNum) {
+            if (mNum == 3) {
+                QTimer::singleShot(5000, this, [this]() {
+                    showEvent1();
+                });
+            }
         });
     } else {
         if (m_eventTitleLabel) m_eventTitleLabel->show();
@@ -523,6 +536,304 @@ QString ReadyPage::formatRemainingTime() const
     return QStringLiteral("%1:%2")
         .arg(min, 2, 10, QLatin1Char('0'))
         .arg(sec, 2, 10, QLatin1Char('0'));
+}
+
+void ReadyPage::setServerMessageCallback(const std::function<void(const QJsonObject &)> &cb)
+{
+    m_serverMessageCb = cb;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EVENT 1: 바이러스 제거 긴급 이벤트
+// ════════════════════════════════════════════════════════════════════════════
+void ReadyPage::showEvent1()
+{
+    qDebug() << "[EVENT] Event 1 triggered";
+
+    // ── GM에 이벤트 시작 알림 ──
+    if (m_serverMessageCb) {
+        QJsonObject msg;
+        msg["type"] = "event_status";
+        msg["event"] = "event1";
+        msg["status"] = "started";
+        m_serverMessageCb(msg);
+    }
+
+    QWidget *topLevel = window();
+
+    // ═══ 1단계: 이벤트 시작 알림 다이얼로그 ═══
+    {
+        auto *dlg = new QDialog(topLevel);
+        dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setFixedSize(500, 200);
+        dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #ff2222;"));
+
+        auto *layout = new QVBoxLayout(dlg);
+        layout->setContentsMargins(24, 20, 24, 16);
+        layout->setSpacing(12);
+
+        auto *msgLabel = new QLabel(dlg);
+        msgLabel->setWordWrap(true);
+        msgLabel->setAlignment(Qt::AlignCenter);
+        msgLabel->setText(QStringLiteral(
+            "[EMERGENCY ALERT]\n\n"
+            "외부 바이러스가 보안 시스템 커널에 침투했습니다.\n"
+            "긴급 이벤트 1이 시작됩니다."));
+        msgLabel->setStyleSheet(QStringLiteral(
+            "color: #ff4444; font-size: 16px; font-weight: bold; "
+            "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+        layout->addWidget(msgLabel, 1);
+
+        auto *btnRow = new QHBoxLayout();
+        btnRow->addStretch();
+        auto *btnOk = new QPushButton(QStringLiteral("확인"), dlg);
+        btnOk->setFixedSize(100, 36);
+        btnOk->setCursor(Qt::PointingHandCursor);
+        btnOk->setFocusPolicy(Qt::NoFocus);
+        btnOk->setStyleSheet(QStringLiteral(
+            "QPushButton { background: #1a1a2e; color: #ff4444; border: 1px solid #ff4444; "
+            "border-radius: 4px; font-size: 14px; font-weight: bold; font-family: Consolas; }"
+            "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
+        btnRow->addWidget(btnOk);
+        layout->addLayout(btnRow);
+
+        QObject::connect(btnOk, &QPushButton::clicked, dlg, &QDialog::accept);
+
+        // 오버레이
+        auto *overlay = new QWidget(topLevel);
+        overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+        overlay->setGeometry(topLevel->rect());
+        overlay->show();
+        overlay->raise();
+
+        if (auto *screen = QApplication::primaryScreen()) {
+            const QRect geo = screen->availableGeometry();
+            dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+        }
+
+        dlg->exec();
+        overlay->hide();
+        overlay->deleteLater();
+    }
+
+    // ═══ 2단계: 긴급 이벤트 메인 패널 ═══
+    bool solved = false;
+    {
+        auto *dlg = new QDialog(topLevel);
+        dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+        dlg->setAttribute(Qt::WA_DeleteOnClose, false);  // 수동 삭제
+        dlg->setFixedSize(620, 420);
+
+        auto *mainLayout = new QVBoxLayout(dlg);
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+        mainLayout->setSpacing(0);
+
+        // 외부 경고 박스
+        auto *outerFrame = new QFrame(dlg);
+        outerFrame->setStyleSheet(QStringLiteral(
+            "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+        auto *outerGlow = new QGraphicsDropShadowEffect(outerFrame);
+        outerGlow->setBlurRadius(40);
+        outerGlow->setColor(QColor(255, 34, 34, 160));
+        outerGlow->setOffset(0, 0);
+        outerFrame->setGraphicsEffect(outerGlow);
+
+        auto *outerLayout = new QVBoxLayout(outerFrame);
+        outerLayout->setContentsMargins(20, 16, 20, 16);
+        outerLayout->setSpacing(12);
+
+        // 제목
+        auto *titleLabel = new QLabel(QStringLiteral("⚠️ EVENT 1: 바이러스 제거 ⚠️"), outerFrame);
+        titleLabel->setAlignment(Qt::AlignCenter);
+        titleLabel->setStyleSheet(QStringLiteral(
+            "color: #ff2222; font-size: 24px; font-weight: 900; "
+            "font-family: 'Consolas', monospace; background: transparent; border: none; "
+            "text-shadow: 0 0 10px rgba(255,34,34,0.5);"));
+        outerLayout->addWidget(titleLabel);
+
+        // 내부 박스
+        auto *innerFrame = new QFrame(outerFrame);
+        innerFrame->setStyleSheet(QStringLiteral(
+            "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+        auto *innerLayout = new QVBoxLayout(innerFrame);
+        innerLayout->setContentsMargins(16, 14, 16, 14);
+        innerLayout->setSpacing(10);
+
+        auto *questionLabel = new QLabel(innerFrame);
+        questionLabel->setWordWrap(true);
+        questionLabel->setAlignment(Qt::AlignCenter);
+        questionLabel->setText(QStringLiteral(
+            "외부 바이러스가 보안 시스템 커널에 침투했습니다.\n"
+            "바이러스 모듈명 'virus.ko'를 제거하는 올바른 명령어를 선택하십시오.\n"));
+        questionLabel->setStyleSheet(QStringLiteral(
+            "color: #ffffff; font-size: 15px; font-family: 'Consolas', monospace; "
+            "background: transparent; border: none; line-height: 140%;"));
+        innerLayout->addWidget(questionLabel);
+
+        // 선택지
+        auto *choicesLabel = new QLabel(innerFrame);
+        choicesLabel->setWordWrap(true);
+        choicesLabel->setAlignment(Qt::AlignCenter);
+        choicesLabel->setText(QStringLiteral(
+            "A) insmod virus.ko\n"
+            "B) rmmod virus\n"
+            "C) modprobe virus\n"
+            "D) depmod virus"));
+        choicesLabel->setStyleSheet(QStringLiteral(
+            "color: #ffcc00; font-size: 16px; font-weight: bold; "
+            "font-family: 'Consolas', monospace; background: transparent; border: none; "
+            "line-height: 160%;"));
+        innerLayout->addWidget(choicesLabel);
+
+        // 경고
+        auto *warningLabel = new QLabel(QStringLiteral(
+            "(오답 시 바이러스로 인해 타이머가 1분 감소합니다.)"), innerFrame);
+        warningLabel->setAlignment(Qt::AlignCenter);
+        warningLabel->setStyleSheet(QStringLiteral(
+            "color: #ff6666; font-size: 13px; font-family: 'Consolas', monospace; "
+            "background: transparent; border: none;"));
+        innerLayout->addWidget(warningLabel);
+
+        outerLayout->addWidget(innerFrame, 1);
+
+        // A/B/C/D 버튼
+        auto *btnRow = new QHBoxLayout();
+        btnRow->setSpacing(12);
+        btnRow->addStretch();
+
+        const QStringList choices = { QStringLiteral("A"), QStringLiteral("B"),
+                                      QStringLiteral("C"), QStringLiteral("D") };
+        auto *statusLabel = new QLabel(outerFrame);
+        statusLabel->setAlignment(Qt::AlignCenter);
+        statusLabel->setStyleSheet(QStringLiteral(
+            "color: #ff4444; font-size: 14px; font-weight: bold; "
+            "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+        statusLabel->setVisible(false);
+
+        for (const QString &ch : choices) {
+            auto *btn = new QPushButton(ch, outerFrame);
+            btn->setFixedSize(80, 44);
+            btn->setCursor(Qt::PointingHandCursor);
+            btn->setFocusPolicy(Qt::NoFocus);
+            btn->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #1a0000; color: #ffffff; border: 2px solid #ff4444; "
+                "border-radius: 6px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
+                "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"
+                "QPushButton:pressed { background: #cc0000; }"));
+            btnRow->addWidget(btn);
+
+            QObject::connect(btn, &QPushButton::clicked, dlg,
+                [this, dlg, ch, statusLabel, &solved]() {
+                    if (ch == QStringLiteral("B")) {
+                        // 정답
+                        solved = true;
+                        dlg->accept();
+                    } else {
+                        // 오답 — 타이머 1분 감소 요청
+                        statusLabel->setText(QStringLiteral("❌ 오답! 타이머가 1분 감소합니다."));
+                        statusLabel->setVisible(true);
+                        if (m_serverMessageCb) {
+                            QJsonObject msg;
+                            msg["type"] = "timer_penalty";
+                            msg["seconds"] = 60;
+                            m_serverMessageCb(msg);
+                        }
+                        // 타이머 로컬도 감소
+                        m_remainingSeconds = qMax(0, m_remainingSeconds - 60);
+                        updateHeader();
+                        QTimer::singleShot(1500, statusLabel, [statusLabel]() {
+                            statusLabel->setVisible(false);
+                        });
+                    }
+                });
+        }
+        btnRow->addStretch();
+        outerLayout->addLayout(btnRow);
+        outerLayout->addWidget(statusLabel);
+
+        mainLayout->addWidget(outerFrame);
+
+        // 오버레이
+        auto *overlay = new QWidget(topLevel);
+        overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 200);"));
+        overlay->setGeometry(topLevel->rect());
+        overlay->show();
+        overlay->raise();
+
+        if (auto *screen = QApplication::primaryScreen()) {
+            const QRect geo = screen->availableGeometry();
+            dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+        }
+
+        dlg->exec();
+        overlay->hide();
+        overlay->deleteLater();
+        dlg->deleteLater();
+    }
+
+    // ═══ 3단계: 이벤트 종료 알림 다이얼로그 ═══
+    {
+        auto *dlg = new QDialog(topLevel);
+        dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setFixedSize(500, 160);
+        dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #00ff41;"));
+
+        auto *layout = new QVBoxLayout(dlg);
+        layout->setContentsMargins(24, 20, 24, 16);
+        layout->setSpacing(12);
+
+        auto *msgLabel = new QLabel(dlg);
+        msgLabel->setWordWrap(true);
+        msgLabel->setAlignment(Qt::AlignCenter);
+        msgLabel->setText(QStringLiteral("시스템 정상화 완료. 본 미션으로 복귀합니다."));
+        msgLabel->setStyleSheet(QStringLiteral(
+            "color: #00ff41; font-size: 16px; font-weight: bold; "
+            "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+        layout->addWidget(msgLabel, 1);
+
+        auto *btnRow = new QHBoxLayout();
+        btnRow->addStretch();
+        auto *btnOk = new QPushButton(QStringLiteral("확인"), dlg);
+        btnOk->setFixedSize(100, 36);
+        btnOk->setCursor(Qt::PointingHandCursor);
+        btnOk->setFocusPolicy(Qt::NoFocus);
+        btnOk->setStyleSheet(QStringLiteral(
+            "QPushButton { background: #1a1a2e; color: #00ff41; border: 1px solid #00ff41; "
+            "border-radius: 4px; font-size: 14px; font-weight: bold; font-family: Consolas; }"
+            "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
+        btnRow->addWidget(btnOk);
+        layout->addLayout(btnRow);
+
+        QObject::connect(btnOk, &QPushButton::clicked, dlg, &QDialog::accept);
+
+        auto *overlay = new QWidget(topLevel);
+        overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+        overlay->setGeometry(topLevel->rect());
+        overlay->show();
+        overlay->raise();
+
+        if (auto *screen = QApplication::primaryScreen()) {
+            const QRect geo = screen->availableGeometry();
+            dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+        }
+
+        dlg->exec();
+        overlay->hide();
+        overlay->deleteLater();
+    }
+
+    // ── GM에 이벤트 종료 알림 ──
+    if (m_serverMessageCb) {
+        QJsonObject msg;
+        msg["type"] = "event_status";
+        msg["event"] = "event1";
+        msg["status"] = "completed";
+        m_serverMessageCb(msg);
+    }
+
+    qDebug() << "[EVENT] Event 1 completed";
 }
 
 MissionPage *ReadyPage::currentMission() const

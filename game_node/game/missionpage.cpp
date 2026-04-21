@@ -667,6 +667,11 @@ void MissionPage::setQrSubmitCallback(const std::function<void(const QByteArray 
     m_qrSubmitCb = cb;
 }
 
+void MissionPage::onFrequencyChanged(int value)
+{
+    Q_UNUSED(value);
+}
+
 void MissionPage::startMission()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
@@ -678,6 +683,7 @@ void MissionPage::startMission()
         }
         QTimer::singleShot(500, this, [this]() {
             showStoryPopup();
+            emit missionProblemShown(m_missionNumber);
         });
     }
 }

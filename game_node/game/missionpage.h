@@ -42,6 +42,7 @@ public:
 signals:
     void missionCompleted(int missionNumber);
     void missionFailed(int missionNumber);
+    void missionProblemShown(int missionNumber);
 
 private slots:
     void onFrequencyChanged(int value);

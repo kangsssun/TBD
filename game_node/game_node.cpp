@@ -93,6 +93,14 @@ GameNode::GameNode(QWidget *parent)
         qDebug() << "[SYSTEM] Progress updated: mission=" << missionNumber << "progress=" << progress;
     });
 
+    // ── Set up server message callback for events ──────────────────────
+    m_readyPage->setServerMessageCallback([this](const QJsonObject &baseMsg) {
+        QJsonObject msg = baseMsg;
+        msg["team_id"] = m_teamId;
+        msg["team_name"] = m_teamName;
+        sendMessage(msg);
+    });
+
     // ── Set up QR submit callback (camera fallback) ────────────────────
     m_readyPage->setQrSubmitCallback([this](const QByteArray &imageData, const std::function<void(const QString &, const QString &)> &resultCb) {
         // 서버로 QR 디코드 요청 전송
