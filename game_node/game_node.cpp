@@ -102,7 +102,7 @@ GameNode::GameNode(QWidget *parent)
     // ── Connect emergency page confirm → go to ready page ──────────────
     QObject::connect(m_emergencyPage, &EmergencyPage::confirmed, this, [this]() {
         // 타이머는 서버에서 시작할 때까지 대기 (시간만 표시하고 카운트다운은 안 함)
-        m_readyPage->syncTimer(45 * 60, false);
+        m_readyPage->syncTimer(20 * 60, false);
         if (m_readyPageIndex >= 0 && m_readyPageIndex < ui->stackedWidget->count()) {
             ui->stackedWidget->setCurrentIndex(m_readyPageIndex);
         }
@@ -234,7 +234,7 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         if (m_readyPage) {
             if (action == "start")  m_readyPage->resumeCountdown();
             else if (action == "pause") m_readyPage->pauseCountdown();
-            else if (action == "reset") m_readyPage->resetCountdown(45 * 60);
+            else if (action == "reset") m_readyPage->resetCountdown(20 * 60);
         }
     }
     else if (type == "timer_sync") {

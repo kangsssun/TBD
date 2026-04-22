@@ -78,7 +78,7 @@ let gameState = {};
 
 // 팀별 타이머 상태: key=team_id, value={ timeRemaining, running }
 const teamTimers = {};
-const TIMER_INITIAL = 45 * 60;
+const TIMER_INITIAL = 20 * 60;
 
 // IP 주소 기반 노드 상태 저장 (재연결 시 복원용)
 // key: IP주소, value: { team_id, team_name, mission, progress }

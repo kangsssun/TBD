@@ -547,8 +547,8 @@ private:
         QObject::connect(m_zyroTimer, &QTimer::timeout, this, [this]() {
             int x = 0, y = 0;
             if (zyro_get_value(&x, &y) == 0) {
-                m_pitchInput = static_cast<double>(x) - m_pitchOffset;
-                m_rollInput  = static_cast<double>(y) - m_rollOffset;
+                m_rollInput   = static_cast<double>(x) - m_rollOffset;
+                m_pitchInput  = static_cast<double>(y) - m_pitchOffset;
             }
         });
         m_zyroTimer->start();
@@ -562,8 +562,8 @@ private:
         if (m_zyroReady) {
             int x = 0, y = 0;
             if (zyro_get_value(&x, &y) == 0) {
-                m_pitchOffset = static_cast<double>(x);
-                m_rollOffset  = static_cast<double>(y);
+                m_rollOffset  = static_cast<double>(x);
+                m_pitchOffset = static_cast<double>(y);
             }
         } else {
             // If not yet polling, start temporarily to read
@@ -571,8 +571,8 @@ private:
                 m_zyroReady = true;
                 int x = 0, y = 0;
                 if (zyro_get_value(&x, &y) == 0) {
-                    m_pitchOffset = static_cast<double>(x);
-                    m_rollOffset  = static_cast<double>(y);
+                    m_rollOffset  = static_cast<double>(x);
+                    m_pitchOffset = static_cast<double>(y);
                 }
             }
         }

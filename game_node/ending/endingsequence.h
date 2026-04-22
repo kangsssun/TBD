@@ -35,7 +35,7 @@ public:
     static void show(QWidget *parent,
                      const QString &teamName,
                      int remainingSeconds,
-                     int totalSeconds = 45 * 60);
+                     int totalSeconds = 20 * 60);
 
     /** Show the 4-digit master code input dialog. Returns true if correct. */
     static bool showCodeInputDialog(QWidget *topLevel, const QString &correctCode);
