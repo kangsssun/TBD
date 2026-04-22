@@ -11,6 +11,7 @@
 #include <QDialog>
 #include <QApplication>
 #include <QScreen>
+#include <QThread>
 #include <QEvent>
 #include <QDateTime>
 #include <QDir>
@@ -522,7 +523,10 @@ void MissionPage::showStoryPopup()
         evaluateMission3CameraPreview();
     }
 
-    // 운영자 모드에서도 스토리 팝업은 표시 (스킵 제거)
+    // 운영자 모드: 스토리 팝업 스킵 (미션5는 자이로 캘리브레이션 필요하므로 예외)
+    if (s_operatorMode && m_missionNumber != 5) {
+        return;
+    }
 
     switch (m_missionNumber) {
     case 1: showMission1Story(); break;
@@ -540,7 +544,9 @@ void MissionPage::showStoryPopup()
 void MissionPage::showResultPopup(bool correct)
 {
     if (correct) {
-        led_correct();
+        auto *thread = QThread::create([]() { led_correct(); });
+        QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        thread->start();
     }
     switch (m_missionNumber) {
     case 1: showMission1Result(correct); break;
@@ -553,13 +559,16 @@ void MissionPage::showResultPopup(bool correct)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Image popup — show a centered image with confirm button
+// Image popup — show a centered image with colored border, auto-dismiss after 5s
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::showImagePopup(const QString &imagePath,
                                   const QString &btnText,
                                   const QString &btnColor,
                                   const QColor &glowColor)
 {
+    Q_UNUSED(btnText);
+    Q_UNUSED(glowColor);
+
     if (m_missionNumber == 3) {
         stopMission3CameraPreview();
         refreshMission3PreviewPlaceholder();
@@ -578,60 +587,22 @@ void MissionPage::showImagePopup(const QString &imagePath,
     auto *frame = new QFrame(dialog);
     frame->setObjectName(QStringLiteral("imgPopupFrame"));
     frame->setStyleSheet(QStringLiteral(
-        "QFrame#imgPopupFrame { background-color: #0c0c0c; border: 1px solid #444; border-radius: 0px; }"
-        "QFrame#imgPopupFrame QPushButton { background-color: transparent; border: none; padding: 0; }"));
+        "QFrame#imgPopupFrame { background-color: #0c0c0c; border: 2px solid %1; border-radius: 6px; }").arg(btnColor));
     auto *frameLayout = new QVBoxLayout(frame);
     frameLayout->setContentsMargins(10, 10, 10, 10);
-    frameLayout->setSpacing(8);
+    frameLayout->setSpacing(0);
 
     auto *imageLabel = new QLabel(frame);
     imageLabel->setAlignment(Qt::AlignCenter);
     imageLabel->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
     QPixmap pix(imagePath);
     if (!pix.isNull()) {
-        imageLabel->setPixmap(pix.scaled(500, 280, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        imageLabel->setPixmap(pix.scaled(510, 330, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     } else {
         imageLabel->setText(QStringLiteral("[ IMAGE ]"));
         imageLabel->setStyleSheet(QStringLiteral("color: #666; font-size: 18px; background: transparent; border: none;"));
     }
     frameLayout->addWidget(imageLabel, 1);
-
-    auto *btnArea = new QWidget(frame);
-    btnArea->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: none;"));
-    auto *btnLayout = new QHBoxLayout(btnArea);
-    btnLayout->setContentsMargins(16, 0, 16, 8);
-
-    auto *closeBtn = new QPushButton(btnText, btnArea);
-    closeBtn->setFixedSize(200, 44);
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setFocusPolicy(Qt::NoFocus);
-    closeBtn->setEnabled(false);
-    closeBtn->setStyleSheet(QStringLiteral(
-        "QPushButton { background-color: #0a1628; color: %1; border: 1px solid %1; "
-        "border-radius: 6px; font-size: 17px; font-weight: 800; "
-        "font-family: 'Consolas', monospace; }"
-        "QPushButton:hover { background-color: %1; color: #0c0c0c; }"
-        "QPushButton:pressed { background-color: %1; color: #0c0c0c; }").arg(btnColor));
-
-    auto *glow = new QGraphicsDropShadowEffect(closeBtn);
-    glow->setBlurRadius(16);
-    glow->setColor(glowColor);
-    glow->setOffset(0, 0);
-    closeBtn->setGraphicsEffect(glow);
-
-    QObject::connect(closeBtn, &QPushButton::clicked, dialog, [dialog]() {
-        QTimer::singleShot(100, dialog, &QDialog::accept);
-    });
-
-    // Delay-enable button to prevent accidental dismiss
-    QTimer::singleShot(1000, closeBtn, [closeBtn]() {
-        closeBtn->setEnabled(true);
-    });
-
-    btnLayout->addStretch();
-    btnLayout->addWidget(closeBtn);
-    btnLayout->addStretch();
-    frameLayout->addWidget(btnArea);
 
     mainLayout->addWidget(frame);
 
@@ -646,6 +617,9 @@ void MissionPage::showImagePopup(const QString &imagePath,
     overlay->setGeometry(topLevel->rect());
     overlay->show();
     overlay->raise();
+
+    // Auto-dismiss after 5 seconds
+    QTimer::singleShot(5000, dialog, &QDialog::accept);
 
     dialog->exec();
 

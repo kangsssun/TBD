@@ -628,11 +628,11 @@ private:
         const double absPitch = std::abs(m_smoothPitch);
         if (absRoll > DEAD_ZONE) {
             const double t = qBound(0.0, (absRoll - DEAD_ZONE) / (MAX_TILT - DEAD_ZONE), 1.0);
-            vx = (m_smoothRoll > 0) ? -MOVE_SPEED * t : MOVE_SPEED * t;
+            vx = (m_smoothRoll > 0) ? MOVE_SPEED * t : -MOVE_SPEED * t;
         }
         if (absPitch > DEAD_ZONE) {
             const double t = qBound(0.0, (absPitch - DEAD_ZONE) / (MAX_TILT - DEAD_ZONE), 1.0);
-            vy = (m_smoothPitch > 0) ? -MOVE_SPEED * t : MOVE_SPEED * t;
+            vy = (m_smoothPitch > 0) ? MOVE_SPEED * t : -MOVE_SPEED * t;
         }
 
         m_player->vx = vx;

@@ -312,6 +312,9 @@ void MissionPage::generateNewTarget()
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::onChargeButtonClicked()
 {
+    // Pause gauge so the player can see where it stopped
+    m_wheelTimer->stop();
+
     // Read the latest gauge value (avoid stale value from event queue delay)
     const int currentGauge = m_wheelProgressBar->value();
     const bool hit = (currentGauge >= m_targetMin && currentGauge <= m_targetMax);
@@ -334,7 +337,17 @@ void MissionPage::onChargeButtonClicked()
             QStringLiteral("실패!  ( %1 / %2 )").arg(m_successCount).arg(MAX_SUCCESS));
     }
 
-    checkGameClear();
+    // Resume gauge after a short pause (unless game is cleared)
+    if (m_successCount < MAX_SUCCESS) {
+        QTimer::singleShot(700, this, [this]() {
+            checkGameClear();
+            if (m_successCount < MAX_SUCCESS) {
+                m_wheelTimer->start();
+            }
+        });
+    } else {
+        checkGameClear();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
