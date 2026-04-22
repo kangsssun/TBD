@@ -115,7 +115,7 @@
             <div class="col-span-4 flex flex-col gap-4">
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">COMMUNICATION LOG</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div><div class="log-panel rounded p-2" id="log-panel"><div class="log-entry" style="color:var(--warn-yellow)">[SYSTEM] 다중 통신 모듈 초기화 완료</div></div></div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">GM BROADCAST</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
-                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="메시지 또는 커맨드 (T1 move mission 3, T2 skip, T1 hint ...)"><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
+                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="메시지 또는 커맨드 (T1 move mission 3, T2 skip, T1 ending, T1 hint ...)"><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
                 </div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">QUICK ACTIONS</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
                     <div class="grid grid-cols-2 gap-2">
@@ -207,6 +207,17 @@
                         activeNodes[tid].eventActive = null;
                         addChatLog('SYSTEM', `T${tid}`, `✅ T${tid} 이벤트 완료: ${data.event}`);
                     }
+                    renderAll();
+                }
+            }
+            else if (data.type === 'game_clear') {
+                const tid = data.team_id;
+                if (activeNodes[tid]) {
+                    activeNodes[tid].cleared = true;
+                    activeNodes[tid].clearTime = data.clear_time;
+                    activeNodes[tid].progress = 100;
+                    if (!clearOrder.includes(tid)) clearOrder.push(tid);
+                    addChatLog('SYSTEM', `T${tid}`, `🎉 T${tid} (${activeNodes[tid].name}) GAME CLEAR! 클리어 타임: ${data.clear_time}`);
                     renderAll();
                 }
             }
@@ -309,7 +320,7 @@
             document.getElementById('gm-msg-input').value='';
 
             // --- GM 관리자 커맨드 파싱 ---
-            const cmdMatch = text.match(/^T(\d+)\s+(move\s+mission|skip|pause|resume|set\s+progress|hint)\s*(.*)$/i);
+            const cmdMatch = text.match(/^T(\d+)\s+(move\s+mission|skip|pause|resume|set\s+progress|hint|ending)\s*(.*)$/i);
             if (cmdMatch) {
                 const cmdTeam = cmdMatch[1];
                 const cmdAction = cmdMatch[2].toLowerCase().replace(/\s+/g,'_');
@@ -340,6 +351,9 @@
                     const hintText = cmdArg || '힌트를 확인하세요!';
                     gmSocket.send(JSON.stringify({type:'gm_command',command:'send_hint',team_id:cmdTeam,hint:hintText}));
                     addChatLog('CMD',`T${cmdTeam}`,`💡 힌트: ${hintText}`);
+                } else if (cmdAction === 'ending') {
+                    gmSocket.send(JSON.stringify({type:'gm_command',command:'force_ending',team_id:cmdTeam}));
+                    addChatLog('CMD',`T${cmdTeam}`,`🎬 엔딩으로 강제 이동`);
                 }
                 return;
             }

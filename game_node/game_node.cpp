@@ -344,6 +344,12 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         qDebug() << "[GM_CMD] Team pause:" << paused;
         // TODO: 팀 일시정지/재개 UI 구현 필요
     }
+    else if (type == "force_ending") {
+        qDebug() << "[GM_CMD] Force ending sequence";
+        if (m_readyPage) {
+            m_readyPage->showEndingSequence();
+        }
+    }
     else if (type == "qr_decode_result") {
         QString status = json["status"].toString();
         QString result = json["result"].toString();

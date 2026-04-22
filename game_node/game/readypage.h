@@ -44,6 +44,7 @@ public:
     void setServerMessageCallback(const std::function<void(const QJsonObject &)> &cb);
     int missionProgress() const { return m_currentProgress; }
     void restoreProgress(int percent) { m_currentProgress = percent; setMissionProgress(percent); }
+    void showEndingSequence();
 
 private:
     void setupUi();

@@ -14,6 +14,7 @@ const wss = new WebSocket.Server({ server });
 
 // 1. GM HTML 화면을 띄워주기 위한 정적 파일 서빙
 app.use(express.static('public'));
+app.use('/ending', express.static(path.resolve(__dirname, '..', 'ending')));
 
 // ── BGM 재생 시스템 ──────────────────────────────────────────────────────
 let bgmProcess = null;
@@ -230,6 +231,35 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
+        // C-4. 게임 클리어 (노드→서버)
+        if (data.type === 'game_clear') {
+            const tid = String(data.team_id || clientInfo.team_id);
+            const t = getTeamTimer(tid);
+            t.running = false;
+            const elapsed = TIMER_INITIAL - t.timeRemaining;
+            const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const clearSec = (elapsed % 60).toString().padStart(2, '0');
+            const clearTime = `${clearMin}:${clearSec}`;
+            console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR! Time: ${clearTime} (${elapsed}s)`);
+            // 타이머 정지 동기화
+            sendToTeam(tid, { type: 'timer_control', action: 'pause' });
+            sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+            broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+            // GM에 클리어 알림
+            broadcastToRole('gm', {
+                type: 'game_clear',
+                team_id: tid,
+                team_name: data.team_name || clientInfo.team_name || '',
+                clear_time: clearTime,
+                elapsed: elapsed
+            });
+            broadcastToRole('gm', {
+                type: 'chat_message', sender: 'system',
+                team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${clearTime}`
+            });
+            return;
+        }
+
         // D. GM 강제 제어 명령
         if (data.type === 'force_clear' && clientInfo.role === 'gm') {
             sendToTeam(data.target_team, data);
@@ -288,18 +318,45 @@ wss.on('connection', (ws, req) => {
             }
             else if (data.command === 'skip_mission') {
                 const cur = gameState[tid] ? gameState[tid].mission : 1;
-                const nextMission = Math.min(cur + 1, 5);
-                const progress = (nextMission - 1) * 20;
-                gameState[tid] = { mission: nextMission, progress: progress };
-                for (const ip of Object.keys(savedNodes)) {
-                    if (String(savedNodes[ip].team_id) === tid) {
-                        savedNodes[ip].mission = nextMission;
-                        savedNodes[ip].progress = progress;
+                if (cur >= 5) {
+                    // 미션 5에서 skip → 게임 클리어 처리
+                    gameState[tid] = { mission: 5, progress: 100 };
+                    for (const ip of Object.keys(savedNodes)) {
+                        if (String(savedNodes[ip].team_id) === tid) {
+                            savedNodes[ip].mission = 5;
+                            savedNodes[ip].progress = 100;
+                        }
                     }
+                    // game_clear 로직 실행
+                    const t = getTeamTimer(tid);
+                    t.running = false;
+                    const elapsed = TIMER_INITIAL - t.timeRemaining;
+                    const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const clearSec = (elapsed % 60).toString().padStart(2, '0');
+                    const clearTime = `${clearMin}:${clearSec}`;
+                    console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR (skip)! Time: ${clearTime}`);
+                    sendToTeam(tid, { type: 'timer_control', action: 'pause' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                    sendToTeam(tid, { type: 'force_ending' });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    broadcastToRole('gm', { type: 'game_clear', team_id: tid, clear_time: clearTime, elapsed });
+                    broadcastToRole('gm', { type: 'chat_message', sender: 'system', team_id: tid, text: `🎉 [T${tid}] GAME CLEAR (skip)! 클리어 타임: ${clearTime}` });
+                    broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: 5, progress: 100 });
+                    broadcastProgressSync();
+                } else {
+                    const nextMission = cur + 1;
+                    const progress = (nextMission - 1) * 20;
+                    gameState[tid] = { mission: nextMission, progress: progress };
+                    for (const ip of Object.keys(savedNodes)) {
+                        if (String(savedNodes[ip].team_id) === tid) {
+                            savedNodes[ip].mission = nextMission;
+                            savedNodes[ip].progress = progress;
+                        }
+                    }
+                    sendToTeam(tid, { type: 'force_move_mission', mission: nextMission, progress: progress });
+                    broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: nextMission, progress: progress });
+                    broadcastProgressSync();
                 }
-                sendToTeam(tid, { type: 'force_move_mission', mission: nextMission, progress: progress });
-                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: nextMission, progress: progress });
-                broadcastProgressSync();
             }
             else if (data.command === 'set_progress') {
                 const pct = data.progress;
@@ -324,6 +381,25 @@ wss.on('connection', (ws, req) => {
             }
             else if (data.command === 'resume_team') {
                 sendToTeam(tid, { type: 'team_pause', paused: false });
+            }
+            else if (data.command === 'force_ending') {
+                // GM이 엔딩으로 강제 이동
+                const t = getTeamTimer(tid);
+                t.running = false;
+                const elapsed = TIMER_INITIAL - t.timeRemaining;
+                const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                const clearSec = (elapsed % 60).toString().padStart(2, '0');
+                const clearTime = `${clearMin}:${clearSec}`;
+                console.log(`[CLEAR] 🎉 Team ${tid} FORCE ENDING! Time: ${clearTime}`);
+                gameState[tid] = { mission: 5, progress: 100 };
+                sendToTeam(tid, { type: 'timer_control', action: 'pause' });
+                sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                sendToTeam(tid, { type: 'force_ending' });
+                broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                broadcastToRole('gm', { type: 'game_clear', team_id: tid, clear_time: clearTime, elapsed });
+                broadcastToRole('gm', { type: 'chat_message', sender: 'system', team_id: tid, text: `🎉 [T${tid}] FORCE ENDING! 클리어 타임: ${clearTime}` });
+                broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: 5, progress: 100 });
+                broadcastProgressSync();
             }
             return;
         }
@@ -556,6 +632,31 @@ const tcpServer = net.createServer((socket) => {
                     console.log(`[TIMER] Team ${tid} penalty -${penalty}s → ${t.timeRemaining}s remaining`);
                     sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: t.running });
                     broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    continue;
+                }
+
+                // 게임 클리어
+                if (msg.type === 'game_clear') {
+                    const tid = String(msg.team_id || clientInfo.team_id);
+                    const t = getTeamTimer(tid);
+                    t.running = false;
+                    const elapsed = TIMER_INITIAL - t.timeRemaining;
+                    const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const clearSec = (elapsed % 60).toString().padStart(2, '0');
+                    const clearTime = `${clearMin}:${clearSec}`;
+                    console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR! Time: ${clearTime} (${elapsed}s)`);
+                    sendToTeam(tid, { type: 'timer_control', action: 'pause' });
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    broadcastToRole('gm', {
+                        type: 'game_clear', team_id: tid,
+                        team_name: msg.team_name || clientInfo.team_name || '',
+                        clear_time: clearTime, elapsed: elapsed
+                    });
+                    broadcastToRole('gm', {
+                        type: 'chat_message', sender: 'system',
+                        team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${clearTime}`
+                    });
                     continue;
                 }
 
