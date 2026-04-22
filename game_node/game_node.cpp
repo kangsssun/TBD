@@ -356,7 +356,7 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         bool isLast = json["is_last"].toBool(false);
         qDebug() << "[SYSTEM] Recovery code received:" << code << "rank:" << rank;
         if (m_readyPage) {
-            m_readyPage->showEndingSequence(code);
+            m_readyPage->showEndingSequence(code, clearTime, rank, totalTeams, isLast);
         }
     }
     else if (type == "recovery_code_wrong") {

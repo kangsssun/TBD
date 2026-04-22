@@ -181,16 +181,12 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
 
             // 미션 5 클리어 → 게임 클리어 처리
             if (completedNumber == 5) {
-                // 서버에 game_clear 전송
+                // 서버에 game_clear 전송 → 서버가 recovery_code를 보내면 game_node.cpp에서 처리
                 if (m_serverMessageCb) {
                     QJsonObject msg;
                     msg["type"] = "game_clear";
                     m_serverMessageCb(msg);
                 }
-                // 엔딩 시퀀스 시작
-                QTimer::singleShot(500, this, [this]() {
-                    showEndingSequence();
-                });
                 return;
             }
 
@@ -315,9 +311,13 @@ void ReadyPage::setupUi()
             if (!cur) return;
             const int curNum = cur->missionNumber();
             if (curNum >= 5) {
-                // Last mission: go to ending
+                // Last mission: go to ending via server (recovery code flow)
                 helpButton->setEnabled(false);
-                showEndingSequence();
+                if (m_serverMessageCb) {
+                    QJsonObject msg;
+                    msg["type"] = "game_clear";
+                    m_serverMessageCb(msg);
+                }
                 return;
             }
 
@@ -882,7 +882,9 @@ MissionPage *ReadyPage::currentMission() const
 // ════════════════════════════════════════════════════════════════════════════
 // ENDING SEQUENCE — 부팅 로그 → 글리치 → 복구코드 → 퇴실 처리
 // ════════════════════════════════════════════════════════════════════════════
-void ReadyPage::showEndingSequence(const QString &recoveryCode)
+void ReadyPage::showEndingSequence(const QString &recoveryCode,
+                                   const QString &serverClearTime,
+                                   int rank, int totalTeams, bool isLast)
 {
     qDebug() << "[ENDING] Ending sequence started";
 
@@ -1695,11 +1697,15 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode)
 
     // ═══ 8단계: Mission Clear 화면 ═══
     {
-        int elapsed = (45 * 60) - m_remainingSeconds;
-        if (elapsed < 0) elapsed = 0;
-        int clearMin = elapsed / 60;
-        int clearSec = elapsed % 60;
-        QString clearTime = QString::asprintf("%02d:%02d", clearMin, clearSec);
+        // 서버에서 전달받은 clearTime 사용, 없으면 로컬 계산
+        QString clearTime = serverClearTime;
+        if (clearTime.isEmpty()) {
+            int elapsed = (20 * 60) - m_remainingSeconds;
+            if (elapsed < 0) elapsed = 0;
+            int clearMin = elapsed / 60;
+            int clearSec = elapsed % 60;
+            clearTime = QString::asprintf("%02d:%02d", clearMin, clearSec);
+        }
 
         auto *dlg = new QDialog(topLevel);
         dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
@@ -1738,6 +1744,21 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode)
             "color: #ffcc00; font-size: 36px; font-weight: bold; "
             "font-family: 'Consolas', monospace; background: transparent; border: none;"));
         layout->addWidget(timeLabel);
+
+        if (rank > 0 && totalTeams > 0) {
+            layout->addSpacing(20);
+            QString rankText = isLast
+                ? QStringLiteral("🚫 퇴근불가 (%1/%2등)").arg(rank).arg(totalTeams)
+                : QStringLiteral("🏆 %1/%2등").arg(rank).arg(totalTeams);
+            auto *rankLabel = new QLabel(rankText, dlg);
+            rankLabel->setAlignment(Qt::AlignCenter);
+            rankLabel->setStyleSheet(isLast
+                ? QStringLiteral("color: #ff4444; font-size: 32px; font-weight: 900; "
+                    "font-family: 'Consolas', monospace; background: transparent; border: none;")
+                : QStringLiteral("color: #00ff9d; font-size: 32px; font-weight: 900; "
+                    "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+            layout->addWidget(rankLabel);
+        }
 
         layout->addStretch(3);
 

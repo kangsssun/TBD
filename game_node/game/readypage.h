@@ -44,7 +44,9 @@ public:
     void setServerMessageCallback(const std::function<void(const QJsonObject &)> &cb);
     int missionProgress() const { return m_currentProgress; }
     void restoreProgress(int percent) { m_currentProgress = percent; setMissionProgress(percent); }
-    void showEndingSequence(const QString &recoveryCode = QString());
+    void showEndingSequence(const QString &recoveryCode = QString(),
+                            const QString &serverClearTime = QString(),
+                            int rank = 0, int totalTeams = 0, bool isLast = false);
 
 private:
     void setupUi();
