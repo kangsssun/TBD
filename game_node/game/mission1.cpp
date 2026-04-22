@@ -13,7 +13,7 @@
 #include <QThread>
 
 #ifdef Q_OS_LINUX
-#include "dd_api/led_api.h"
+#include "dd_api/buzzer_api.h"
 #endif
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -31,7 +31,7 @@ void MissionPage::setupMission1()
     problemLayout->setSpacing(6);
 
     // Header
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 1] - LED 모스부호"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 1] - 부저 모스부호"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
@@ -80,7 +80,7 @@ void MissionPage::setupMission1()
             imageAreaLayout->addStretch();
             leftLayout->addWidget(imageArea, 1);
 
-    // "PLAY" button — trigger LED signal (below image)
+    // "PLAY" button — trigger buzzer signal (below image)
     auto *btnReplay = new QPushButton(QStringLiteral("\u25b6 PLAY"), leftPanel);
     btnReplay->setCursor(Qt::PointingHandCursor);
     btnReplay->setFocusPolicy(Qt::NoFocus);
@@ -104,7 +104,7 @@ void MissionPage::setupMission1()
         btnReplay->setEnabled(false);
 #ifdef Q_OS_LINUX
         auto *thread = QThread::create([]() {
-            led_show_problem();
+            buzzer_show_problem();
         });
         QObject::connect(thread, &QThread::finished, btnReplay, [btnReplay]() {
             btnReplay->setEnabled(true);
@@ -193,6 +193,7 @@ void MissionPage::setupMission1()
     btnSubmit->setGraphicsEffect(submitGlow);
 
     QObject::connect(btnInput, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit, btnInput]() {
+        btnInput->setEnabled(false);
         bool ok = false;
         const QString answer = TeamNameDialog::getInput(
             this,
@@ -207,16 +208,20 @@ void MissionPage::setupMission1()
         }
 
         resetButtonHoverState(btnInput);
+        QTimer::singleShot(300, btnInput, [btnInput]() {
+            btnInput->setEnabled(true);
+        });
     });
 
     QObject::connect(btnSubmit, &QPushButton::clicked, this, [this, answerDisplay, btnSubmit]() {
         if (m_answerInputRaw.isEmpty()) return;
+        btnSubmit->setEnabled(false);
         const bool correct = isAnswerAccepted(m_answerInputRaw);
         showResultPopup(correct);
         if (!correct) {
             m_answerInputRaw.clear();
             answerDisplay->setText(QStringLiteral("-"));
-            btnSubmit->setEnabled(false);
+            // btnSubmit stays disabled until next INPUT
         }
     });
 
@@ -262,7 +267,7 @@ void MissionPage::showMission1Story()
         << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>PLAY 버튼을 눌러 LED 점멸 신호(모스부호)를 확인하고</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>PLAY 버튼을 눌러 부저 음향 신호(모스부호)를 확인하고</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:50]</span>&nbsp;&nbsp;"
                           "<span style='color:#00bfff; %1'>해독된 1단계 인증 코드를 입력하십시오.</span>").arg(sf);
 

@@ -63,7 +63,7 @@ constexpr double GOAL_Y  = SCENE_H - GOAL_SIZE - 10.0;
 
 // ── Hearts / HP ─────────────────────────────────────────────────────────
 constexpr int    MAX_HEARTS = 3;
-constexpr int    INVINCIBLE_FRAMES = 63;   // ~1.0 s at 60 FPS
+constexpr int    INVINCIBLE_FRAMES = 60;   // ~1.0 s at 60 FPS
 
 // ─────────────────────────────────────────────────────────────────────────
 // Player (ball image)
@@ -189,7 +189,6 @@ private:
     QList<QGraphicsPixmapItem*> m_heartItems;
     bool m_invincible = false;
     int  m_invincibleCounter = 0;
-    int  m_stunCounter = 0;
     double m_pitchOffset = 0.0;   // gyro calibration offsets
     double m_rollOffset  = 0.0;
     double m_smoothPitch = 0.0;    // smoothed gyro input
@@ -508,13 +507,13 @@ private:
         m_invincible = true;
         m_invincibleCounter = 0;
 
-        m_player->vx = 0.0;
-        m_player->vy = 0.0;
-
         if (m_hearts <= 0) {
             // All hearts lost → full reset
             m_hearts = MAX_HEARTS;
             updateHeartsDisplay();
+            m_invincible = false;
+            m_invincibleCounter = 0;
+            m_player->setOpacity(1.0);
             m_player->resetTo(START_X, START_Y);
         }
     }
@@ -526,6 +525,7 @@ private:
         m_hearts = MAX_HEARTS;
         m_invincible = false;
         m_invincibleCounter = 0;
+        m_player->setOpacity(1.0);
         updateHeartsDisplay();
         m_player->resetTo(START_X, START_Y);
         m_gameTimer->start(TICK_MS);
@@ -601,21 +601,6 @@ private:
     {
         if (m_completed) return;
 
-        // Stun: skip movement while stunned
-        if (m_stunCounter > 0) {
-            m_stunCounter--;
-            if (m_invincible) {
-                m_invincibleCounter++;
-                m_player->setOpacity((m_invincibleCounter / 4) % 2 ? 0.25 : 1.0);
-                if (m_invincibleCounter >= INVINCIBLE_FRAMES) {
-                    m_invincible = false;
-                    m_invincibleCounter = 0;
-                    m_player->setOpacity(1.0);
-                }
-            }
-            return;
-        }
-
         // Move obstacles
         for (auto &obs : m_movingObs) {
             double y = obs.item->pos().y();
@@ -676,30 +661,11 @@ private:
             }
         }
 
-        // 4) collision — check laser walls (push back + damage if not invincible)
+        // 4) collision — check laser walls (revert position + damage if not invincible)
         for (auto *wall : m_innerWalls) {
             if (m_player->collidesWithItem(wall)) {
-                // Push back away from wall center
-                const QRectF wb = wall->sceneBoundingRect();
-                double dx = m_player->pos().x() - (wb.left() + wb.width() * 0.5);
-                double dy = m_player->pos().y() - (wb.top() + wb.height() * 0.5);
-                const double dist = std::sqrt(dx * dx + dy * dy);
-                if (dist > 0.01) { dx /= dist; dy /= dist; }
-                else { dx = 0.0; dy = -1.0; }
-                const double pushBack = 20.0;
-                double safeX = prevX + dx * pushBack;
-                double safeY = prevY + dy * pushBack;
-                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
-                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
-                m_player->setPos(safeX, safeY);
-
-                m_player->vx = 0.0;
-                m_player->vy = 0.0;
-                m_stunCounter = 60;  // ~1s freeze at 60fps
-                // Take damage only when not invincible
-                if (!m_invincible) {
-                    onWallHit();
-                }
+                m_player->setPos(prevX, prevY);
+                onWallHit();
                 return;
             }
         }
@@ -707,24 +673,8 @@ private:
         // 5) check moving obstacles
         for (const auto &obs : m_movingObs) {
             if (m_player->collidesWithItem(obs.item)) {
-                // Push back away from obstacle center
-                double dx = m_player->pos().x() - obs.item->pos().x();
-                double dy = m_player->pos().y() - obs.item->pos().y();
-                const double dist = std::sqrt(dx * dx + dy * dy);
-                if (dist > 0.01) { dx /= dist; dy /= dist; }
-                else { dx = 0.0; dy = -1.0; }
-                const double pushBack = 20.0;
-                double safeX = prevX + dx * pushBack;
-                double safeY = prevY + dy * pushBack;
-                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
-                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
-                m_player->setPos(safeX, safeY);
-                m_player->vx = 0.0;
-                m_player->vy = 0.0;
-                m_stunCounter = 60;
-                if (!m_invincible) {
-                    onWallHit();
-                }
+                m_player->setPos(prevX, prevY);
+                onWallHit();
                 return;
             }
         }
@@ -732,24 +682,8 @@ private:
         // 6) check rotating obstacles
         for (const auto &rot : m_rotatingObs) {
             if (m_player->collidesWithItem(rot.item)) {
-                // Push back away from obstacle center
-                double dx = m_player->pos().x() - rot.item->pos().x();
-                double dy = m_player->pos().y() - rot.item->pos().y();
-                const double dist = std::sqrt(dx * dx + dy * dy);
-                if (dist > 0.01) { dx /= dist; dy /= dist; }
-                else { dx = 0.0; dy = -1.0; }
-                const double pushBack = 20.0;
-                double safeX = prevX + dx * pushBack;
-                double safeY = prevY + dy * pushBack;
-                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
-                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
-                m_player->setPos(safeX, safeY);
-                m_player->vx = 0.0;
-                m_player->vy = 0.0;
-                m_stunCounter = 60;
-                if (!m_invincible) {
-                    onWallHit();
-                }
+                m_player->setPos(prevX, prevY);
+                onWallHit();
                 return;
             }
         }
@@ -855,7 +789,7 @@ void MissionPage::showMission5Story()
         << QStringLiteral("<span style='color:#666; %1'>[17:29:16]</span>&nbsp;&nbsp;"
                           "<span style='color:#00bfff; %1'>레이저에 닿지 않게 GOAL 지점까지 안전하게 빼내십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:17]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>체력(♥)이 모두 소진되면 갓찌가 비웃으며 처음으로 되돌립니다!</span>").arg(sf);
+                          "<span style='color:#eab308; %1'>체력이 모두 소진되면 갓찌가 비웃으며 처음으로 되돌립니다!</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),

@@ -243,6 +243,7 @@ void EmergencyPage::setupUi()
 
     // ── Connections ────────────────────────────────────────────────────
     QObject::connect(m_confirmButton, &QPushButton::clicked, this, [this]() {
+        m_confirmButton->setEnabled(false);
         emit confirmed();
     });
 

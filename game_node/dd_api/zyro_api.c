@@ -37,15 +37,15 @@ static void *zyro_thread_func(void *arg)
 
         if (ev.type == EV_ABS) {
             if (ev.code == ABS_X)
-                raw_x = ev.value;
-            else if (ev.code == ABS_Y)
                 raw_y = ev.value;
+            else if (ev.code == ABS_Y)
+                raw_x = ev.value;
         }
 
         if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
             pthread_mutex_lock(&g_mutex);
-            g_cur_x = raw_x - g_base_x;
-            g_cur_y = raw_y - g_base_y;
+            g_cur_x = -(raw_x - g_base_x);
+            g_cur_y = (raw_y - g_base_y);
             pthread_mutex_unlock(&g_mutex);
         }
     }

@@ -42,6 +42,7 @@ SOURCES += \
     keyboard/keyboardpanel.cpp \
     title/teamnamedialog.cpp \
     intro/emergencypage.cpp \
+    ending/endingsequence.cpp \
     game/readypage.cpp \
     game/missionpage.cpp \
     game/mission1.cpp \
@@ -57,6 +58,7 @@ HEADERS += \
     keyboard/keyboardpanel.h \
     title/teamnamedialog.h \
     intro/emergencypage.h \
+    ending/endingsequence.h \
     game/readypage.h \
     game/missionpage.h \
     game/missionpage_utils.h \

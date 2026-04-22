@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
 int led_show_problem();
+int led_correct();
 
 #ifdef __cplusplus
 }

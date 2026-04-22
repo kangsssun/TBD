@@ -20,6 +20,7 @@
 
 #ifdef Q_OS_LINUX
 #include "dd_api/camera_api.h"
+#include "dd_api/led_api.h"
 #endif
 
 bool MissionPage::s_operatorMode = false;
@@ -538,6 +539,11 @@ void MissionPage::showStoryPopup()
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::showResultPopup(bool correct)
 {
+#ifdef Q_OS_LINUX
+    if (correct) {
+        led_correct();
+    }
+#endif
     switch (m_missionNumber) {
     case 1: showMission1Result(correct); break;
     case 2: showMission2Result(correct); break;
