@@ -150,7 +150,7 @@ protected:
 
         painter.setPen(QColor("#6fa87f"));
         painter.drawText(QRectF(plotRect.left(), rect().height() - 20, plotRect.width(), 16), Qt::AlignCenter,
-                         QStringLiteral("시간 (초)"));
+                         QStringLiteral("s"));
     }
 
 private:
@@ -233,13 +233,13 @@ private:
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::setupMission4()
 {
-    const double targetTemp = 25.2;
+    const double targetTemp = 23.0;
     const double tempMin = 20.0;
-    const double tempMax = 25.0;
-    const double tolerance = 0.2;
+    const double tempMax = 26.0;
+    const double clearThreshold = 23.0;
     const double graphWindowSec = 30.0;
 
-    m_correctAnswer = QStringLiteral("25.2");
+    m_correctAnswer = QStringLiteral("23.0");
 
     auto *page = new QWidget(this);
     page->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
@@ -362,15 +362,19 @@ void MissionPage::setupMission4()
     constexpr int sampleIntervalMs = 2000;
     constexpr double sampleIntervalSec = 2.0;
 
-    double *currentTemp = new double(targetTemp);
+    double *currentTemp = new double(35.0);  // default high; overwritten by sensor
+    double *baselineTemp = new double(35.0);  // initial sensor reading for amplification
     double *elapsedSec = new double(0.0);
     double *inRangeSec = new double(0.0);
     bool *completed = new bool(false);
     bool *sensorReady = new bool(false);
 
+    // Amplification: real sensor change * AMPLIFY_FACTOR = game temperature change
+    // e.g., sensor drops 1°C → game drops 3°C
+    constexpr double AMPLIFY_FACTOR = 3.0;
+
     auto updateTelemetry = [=](bool appendGraphPoint) {
-        const double diff = qAbs(*currentTemp - targetTemp);
-        const bool locked = diff <= tolerance;
+        const bool locked = *currentTemp <= clearThreshold;
 
         currentValue->setText(QStringLiteral("현재: %1°C").arg(*currentTemp, 0, 'f', 1));
         if (locked) {
@@ -381,7 +385,7 @@ void MissionPage::setupMission4()
             statusLabel->setText(QStringLiteral("STATUS: TARGET LOCKED"));
             statusLabel->setStyleSheet(QStringLiteral(
                 "color: #00ff88; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
-        } else if (*currentTemp > targetTemp) {
+        } else {
             currentFrame->setStyleSheet(QStringLiteral(
                 "background: #170707; border: 1px solid #7a1e1e; border-radius: 6px;"));
             currentValue->setStyleSheet(QStringLiteral(
@@ -389,16 +393,9 @@ void MissionPage::setupMission4()
             statusLabel->setText(QStringLiteral("STATUS: OVERHEAT"));
             statusLabel->setStyleSheet(QStringLiteral(
                 "color: #ff5555; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
-        } else {
-            currentFrame->setStyleSheet(QStringLiteral(
-                "background: #071017; border: 1px solid #1e4f7a; border-radius: 6px;"));
-            currentValue->setStyleSheet(QStringLiteral(
-                "color: #00d4ff; font-size: 26px; font-weight: 800; font-family: 'Consolas', monospace; border: none;"));
-            statusLabel->setText(QStringLiteral("STATUS: TOO COLD"));
-            statusLabel->setStyleSheet(QStringLiteral(
-                "color: #4db8ff; font-size: 13px; font-weight: 700; font-family: 'Consolas', monospace; border: none;"));
         }
 
+        const double diff = qAbs(*currentTemp - clearThreshold);
         const double fanRatio = qBound(0.15, diff / 8.0 + 0.15, 1.0);
         fanWidget->setSpeedRatio(fanRatio);
         fanState->setText(QStringLiteral("RPM: %1").arg(static_cast<int>(900 + fanRatio * 2400)));
@@ -420,9 +417,9 @@ void MissionPage::setupMission4()
             return;
         }
 
-        if (qAbs(*currentTemp - targetTemp) <= tolerance) {
+        if (*currentTemp <= clearThreshold) {
             *inRangeSec += sampleIntervalSec;
-            if (*inRangeSec >= 4.0) {
+            if (*inRangeSec >= 3.0) {
                 *completed = true;
                 QTimer::singleShot(350, this, [this]() { showResultPopup(true); });
             }
@@ -450,6 +447,15 @@ void MissionPage::setupMission4()
     if (thermal_init() == 0) {
         thermal_start_thread();
         *sensorReady = true;
+
+        // Read initial sensor value as baseline
+        float initTemp = 0.0f;
+        if (thermal_get_value(&initTemp) == 0) {
+            *baselineTemp = static_cast<double>(initTemp);
+            // Start game temp at 25.5 (above 23 threshold, needs cooling)
+            *currentTemp = 25.5;
+        }
+
         statusLabel->setText(QStringLiteral("STATUS: SENSOR READY"));
     } else {
         statusLabel->setText(QStringLiteral("STATUS: SENSOR INIT FAILED"));
@@ -476,7 +482,11 @@ void MissionPage::setupMission4()
             return;
         }
 
-        *currentTemp = qBound(tempMin, static_cast<double>(temp), tempMax);
+        // Amplify: game_temp = 25.5 + (sensor_change_from_baseline * AMPLIFY_FACTOR)
+        // If sensor drops, game temp drops faster
+        const double sensorDelta = static_cast<double>(temp) - *baselineTemp;
+        const double gameTemp = 25.5 + sensorDelta * AMPLIFY_FACTOR;
+        *currentTemp = qMax(tempMin, gameTemp);  // no upper clamp for display
         *elapsedSec += sampleIntervalSec;
         updateTelemetry(true);
         checkComplete();
@@ -488,9 +498,10 @@ void MissionPage::setupMission4()
         thermalTimer->start();
     }
 
-    QObject::connect(page, &QObject::destroyed, [currentTemp, elapsedSec, inRangeSec, completed, sensorReady, stopThermalPolling]() {
+    QObject::connect(page, &QObject::destroyed, [currentTemp, baselineTemp, elapsedSec, inRangeSec, completed, sensorReady, stopThermalPolling]() {
         stopThermalPolling();
         delete currentTemp;
+        delete baselineTemp;
         delete elapsedSec;
         delete inRangeSec;
         delete completed;
@@ -524,7 +535,7 @@ void MissionPage::showMission4Story()
         << QStringLiteral("<span style='color:#666; %1'>[17:27:16]</span>&nbsp;&nbsp;"
                           "<span style='color:#00bfff; %1'>4단계 인증은 온도 기반입니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:17]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>목표 범위 : 25.0°C ~ 25.5°C · 3초 유지</span>").arg(sf);
+                          "<span style='color:#00bfff; %1'>목표 조건 : 23.0°C 이하 · 3초 유지</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
@@ -550,11 +561,11 @@ void MissionPage::showMission4Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:20]</span>&nbsp;&nbsp;"
                               "<span style='color:#00ff41; %1'>서버 온도 모니터링 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:21]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>현재 온도 : 25.2°C</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>현재 온도 : 22.8°C</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:22]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>정상 범위 진입 확인</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>23.0°C 이하 진입 확인</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>정상 범위 3초 유지 완료</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>목표 온도 3초 유지 완료</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:24]</span>&nbsp;&nbsp;"
                               "<span style='color:#00ff41; %1'>냉각 시스템 재가동</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:25]</span>&nbsp;&nbsp;"
@@ -581,15 +592,15 @@ void MissionPage::showMission4Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:20]</span>&nbsp;&nbsp;"
                               "<span style='color:#ff4444; %1'>서버 온도 모니터링 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:21]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>현재 온도 : 23.1°C</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>현재 온도 : 28.5°C</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:22]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>정상 범위 미달</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>목표 온도 미달성</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>서버 온도가 허용 범위에 미치지 못하고 있습니다.</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>서버 온도가 아직 충분히 내려가지 않았습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:24]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>가온이 필요합니다.</span>").arg(sf)
+                              "<span style='color:#eab308; %1'>냉각이 필요합니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>온도를 25.0°C ~ 25.5°C 범위로 높이십시오.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>온도를 23.0°C 이하로 낮추십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),
