@@ -84,6 +84,24 @@ const TIMER_INITIAL = 45 * 60;
 // key: IP주소, value: { team_id, team_name, mission, progress }
 const savedNodes = {};
 
+// 클리어 기록: key=team_id, value={ elapsed, clearTime, rank }
+const clearRecords = {};
+// 복구 코드: key=team_id, value=code (4자리 랜덤)
+const recoveryCodes = {};
+
+function generateRecoveryCode() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function getTotalTeamCount() {
+    return Object.keys(teamTimers).length;
+}
+
+function getClearRank(tid) {
+    // 현재까지 클리어한 팀 수 = 이 팀의 등수
+    return Object.keys(clearRecords).length;
+}
+
 // 연결 순서 기반 팀 ID 자동 할당 카운터
 let nextTeamId = 1;
 
@@ -231,32 +249,57 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
-        // C-4. 게임 클리어 (노드→서버)
+        // C-4. 게임 클리어 (노드→서버) — 미션5 완료 시 복구 코드 발급
         if (data.type === 'game_clear') {
             const tid = String(data.team_id || clientInfo.team_id);
+            const code = generateRecoveryCode();
+            recoveryCodes[tid] = code;
+            // 클리어 정보 미리 계산 (타이머 정지 + 기록)
             const t = getTeamTimer(tid);
             t.running = false;
             const elapsed = TIMER_INITIAL - t.timeRemaining;
             const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
             const clearSec = (elapsed % 60).toString().padStart(2, '0');
             const clearTime = `${clearMin}:${clearSec}`;
-            console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR! Time: ${clearTime} (${elapsed}s)`);
-            // 타이머 정지 동기화
+            clearRecords[tid] = { elapsed, clearTime };
+            const rank = getClearRank(tid);
+            const totalTeams = getTotalTeamCount();
+            const isLast = (rank >= totalTeams && totalTeams > 1);
+            console.log(`[CLEAR] Team ${tid} mission 5 done, recovery code: ${code}, time: ${clearTime}, rank: ${rank}/${totalTeams}`);
             sendToTeam(tid, { type: 'timer_control', action: 'pause' });
             sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+            // 노드에 복구 코드 + 클리어 정보 함께 전송
+            sendToTeam(tid, { type: 'recovery_code', code: code, clear_time: clearTime, rank, total_teams: totalTeams, is_last: isLast });
             broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
-            // GM에 클리어 알림
-            broadcastToRole('gm', {
-                type: 'game_clear',
-                team_id: tid,
-                team_name: data.team_name || clientInfo.team_name || '',
-                clear_time: clearTime,
-                elapsed: elapsed
-            });
             broadcastToRole('gm', {
                 type: 'chat_message', sender: 'system',
-                team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${clearTime}`
+                team_id: tid, text: `🔑 [T${tid}] 복구 코드 발급: ${code}`
             });
+            return;
+        }
+
+        // C-4b. 복구 코드 확인 (노드→서버, 기록용)
+        if (data.type === 'verify_recovery_code') {
+            const tid = String(data.team_id || clientInfo.team_id);
+            const inputCode = String(data.code || '');
+            const expectedCode = recoveryCodes[tid];
+            if (inputCode === expectedCode) {
+                console.log(`[CLEAR] 🎉 Team ${tid} FINAL CLEAR verified!`);
+                const rec = clearRecords[tid] || {};
+                broadcastToRole('gm', {
+                    type: 'game_clear', team_id: tid,
+                    team_name: data.team_name || clientInfo.team_name || '',
+                    clear_time: rec.clearTime || '??:??', elapsed: rec.elapsed || 0,
+                    rank: getClearRank(tid), total_teams: getTotalTeamCount()
+                });
+                broadcastToRole('gm', {
+                    type: 'chat_message', sender: 'system',
+                    team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${rec.clearTime || '??:??'} (${getClearRank(tid)}/${getTotalTeamCount()}등)`
+                });
+                delete recoveryCodes[tid];
+            } else {
+                console.log(`[CLEAR] Team ${tid} wrong recovery code: ${inputCode} (expected ${expectedCode})`);
+            }
             return;
         }
 
@@ -319,7 +362,7 @@ wss.on('connection', (ws, req) => {
             else if (data.command === 'skip_mission') {
                 const cur = gameState[tid] ? gameState[tid].mission : 1;
                 if (cur >= 5) {
-                    // 미션 5에서 skip → 게임 클리어 처리
+                    // 미션 5에서 skip → 최종 클리어 처리
                     gameState[tid] = { mission: 5, progress: 100 };
                     for (const ip of Object.keys(savedNodes)) {
                         if (String(savedNodes[ip].team_id) === tid) {
@@ -327,20 +370,25 @@ wss.on('connection', (ws, req) => {
                             savedNodes[ip].progress = 100;
                         }
                     }
-                    // game_clear 로직 실행
                     const t = getTeamTimer(tid);
                     t.running = false;
                     const elapsed = TIMER_INITIAL - t.timeRemaining;
                     const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
                     const clearSec = (elapsed % 60).toString().padStart(2, '0');
                     const clearTime = `${clearMin}:${clearSec}`;
-                    console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR (skip)! Time: ${clearTime}`);
+                    clearRecords[tid] = { elapsed, clearTime };
+                    const rank = getClearRank(tid);
+                    const totalTeams = getTotalTeamCount();
+                    const isLast = (rank >= totalTeams && totalTeams > 1);
+                    console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR (skip)! Time: ${clearTime} Rank: ${rank}/${totalTeams}`);
+                    const code = generateRecoveryCode();
+                    recoveryCodes[tid] = code;
                     sendToTeam(tid, { type: 'timer_control', action: 'pause' });
                     sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
-                    sendToTeam(tid, { type: 'force_ending' });
+                    sendToTeam(tid, { type: 'recovery_code', code: code, clear_time: clearTime, rank, total_teams: totalTeams, is_last: isLast });
                     broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
-                    broadcastToRole('gm', { type: 'game_clear', team_id: tid, clear_time: clearTime, elapsed });
-                    broadcastToRole('gm', { type: 'chat_message', sender: 'system', team_id: tid, text: `🎉 [T${tid}] GAME CLEAR (skip)! 클리어 타임: ${clearTime}` });
+                    broadcastToRole('gm', { type: 'game_clear', team_id: tid, clear_time: clearTime, elapsed, rank, total_teams: totalTeams });
+                    broadcastToRole('gm', { type: 'chat_message', sender: 'system', team_id: tid, text: `🎉 [T${tid}] GAME CLEAR (skip)! ${clearTime} (${rank}/${totalTeams}등)` });
                     broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: 5, progress: 100 });
                     broadcastProgressSync();
                 } else {
@@ -383,21 +431,30 @@ wss.on('connection', (ws, req) => {
                 sendToTeam(tid, { type: 'team_pause', paused: false });
             }
             else if (data.command === 'force_ending') {
-                // GM이 엔딩으로 강제 이동
+                // GM이 엔딩으로 강제 이동 — 복구 코드 입력부터 시작
+                const code = generateRecoveryCode();
+                recoveryCodes[tid] = code;
+                // 클리어 정보 계산
                 const t = getTeamTimer(tid);
                 t.running = false;
                 const elapsed = TIMER_INITIAL - t.timeRemaining;
                 const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
                 const clearSec = (elapsed % 60).toString().padStart(2, '0');
                 const clearTime = `${clearMin}:${clearSec}`;
-                console.log(`[CLEAR] 🎉 Team ${tid} FORCE ENDING! Time: ${clearTime}`);
+                clearRecords[tid] = { elapsed, clearTime };
+                const rank = getClearRank(tid);
+                const totalTeams = getTotalTeamCount();
+                const isLast = (rank >= totalTeams && totalTeams > 1);
+                console.log(`[CLEAR] Team ${tid} force ending, recovery code: ${code}, time: ${clearTime}`);
                 gameState[tid] = { mission: 5, progress: 100 };
                 sendToTeam(tid, { type: 'timer_control', action: 'pause' });
                 sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
-                sendToTeam(tid, { type: 'force_ending' });
+                sendToTeam(tid, { type: 'recovery_code', code: code, clear_time: clearTime, rank, total_teams: totalTeams, is_last: isLast });
                 broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
-                broadcastToRole('gm', { type: 'game_clear', team_id: tid, clear_time: clearTime, elapsed });
-                broadcastToRole('gm', { type: 'chat_message', sender: 'system', team_id: tid, text: `🎉 [T${tid}] FORCE ENDING! 클리어 타임: ${clearTime}` });
+                broadcastToRole('gm', {
+                    type: 'chat_message', sender: 'system',
+                    team_id: tid, text: `🔑 [T${tid}] 강제 엔딩 → 복구 코드 발급: ${code}`
+                });
                 broadcastToRole('gm', { type: 'update_progress', team_id: tid, mission: 5, progress: 100 });
                 broadcastProgressSync();
             }

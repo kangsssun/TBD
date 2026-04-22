@@ -6,6 +6,7 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QProgressBar>
@@ -20,6 +21,10 @@
 #include <QDebug>
 #include <QPixmap>
 #include <QFrame>
+#include <QDir>
+#include <QFileInfo>
+#include <QCoreApplication>
+#include <QLineEdit>
 
 ReadyPage::ReadyPage(QWidget *parent)
     : QWidget(parent)
@@ -172,18 +177,14 @@ void ReadyPage::setMissionWidget(MissionPage *mission)
                 m_progressUpdateCb(completedNumber + 1, m_currentProgress);
             }
 
-            // 미션 5 클리어 → 게임 클리어 처리
+            // 미션 5 클리어 → 서버에 game_clear 전송 (서버가 복구코드 발급)
             if (completedNumber == 5) {
-                // 서버에 game_clear 전송
                 if (m_serverMessageCb) {
                     QJsonObject msg;
                     msg["type"] = "game_clear";
                     m_serverMessageCb(msg);
                 }
-                // 엔딩 시퀀스 시작
-                QTimer::singleShot(500, this, [this]() {
-                    showEndingSequence();
-                });
+                // 서버에서 recovery_code 메시지가 오면 showRecoveryCodeInput 호출됨
                 return;
             }
 
@@ -873,9 +874,205 @@ MissionPage *ReadyPage::currentMission() const
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// RECOVERY CODE INPUT — 시스템 복구 코드 입력
+// ════════════════════════════════════════════════════════════════════════════
+void ReadyPage::showRecoveryCodeInput(const QString &code, const QString &clearTime, int rank, int totalTeams, bool isLast)
+{
+    QWidget *topLevel = window();
+
+    auto *overlay = new QWidget(topLevel);
+    overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 220);"));
+    overlay->setGeometry(topLevel->rect());
+    overlay->show();
+    overlay->raise();
+
+    auto *dlg = new QDialog(topLevel);
+    dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setFixedSize(540, 520);
+    dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
+
+    auto *mainLayout = new QVBoxLayout(dlg);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    auto *frame = new QFrame(dlg);
+    frame->setObjectName(QStringLiteral("recoveryFrame"));
+    frame->setStyleSheet(QStringLiteral(
+        "QFrame#recoveryFrame { background-color: #0c0c0c; border: 2px solid #00ff41; border-radius: 8px; }"));
+    auto *frameLayout = new QVBoxLayout(frame);
+    frameLayout->setContentsMargins(24, 16, 24, 16);
+    frameLayout->setSpacing(10);
+
+    auto *titleLabel = new QLabel(QStringLiteral("🔑 시스템 복구 코드"), frame);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setStyleSheet(QStringLiteral(
+        "color: #00ff41; font-size: 22px; font-weight: 900; "
+        "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+    frameLayout->addWidget(titleLabel);
+
+    auto *descLabel = new QLabel(QStringLiteral("복구 코드를 입력하여 최종 클리어하세요."), frame);
+    descLabel->setAlignment(Qt::AlignCenter);
+    descLabel->setWordWrap(true);
+    descLabel->setStyleSheet(QStringLiteral(
+        "color: #cccccc; font-size: 13px; font-family: 'Consolas', monospace; "
+        "background: transparent; border: none;"));
+    frameLayout->addWidget(descLabel);
+
+    // 복구 코드 표시
+    auto *codeDisplay = new QLabel(QStringLiteral("복구 코드: ") + code, frame);
+    codeDisplay->setAlignment(Qt::AlignCenter);
+    codeDisplay->setStyleSheet(QStringLiteral(
+        "color: #ffcc00; font-size: 28px; font-weight: 900; "
+        "font-family: 'Consolas', monospace; background: #1a1a2e; "
+        "border: 1px solid #ffcc00; border-radius: 4px; padding: 6px;"));
+    frameLayout->addWidget(codeDisplay);
+
+    // 입력 필드 (읽기 전용 — 키패드로만 입력)
+    auto *inputLine = new QLineEdit(frame);
+    inputLine->setAlignment(Qt::AlignCenter);
+    inputLine->setPlaceholderText(QStringLiteral("4자리 코드 입력"));
+    inputLine->setMaxLength(4);
+    inputLine->setReadOnly(true);
+    inputLine->setFocusPolicy(Qt::NoFocus);
+    inputLine->setStyleSheet(QStringLiteral(
+        "QLineEdit { background: #1a1a2e; color: #00ff41; border: 2px solid #00ff41; "
+        "border-radius: 4px; font-size: 28px; font-weight: bold; "
+        "font-family: 'Consolas', monospace; padding: 6px; }"));
+    frameLayout->addWidget(inputLine);
+
+    // 에러 메시지
+    auto *errLabel = new QLabel(frame);
+    errLabel->setAlignment(Qt::AlignCenter);
+    errLabel->setFixedHeight(20);
+    errLabel->setStyleSheet(QStringLiteral(
+        "color: #ff4444; font-size: 13px; font-family: Consolas; background: transparent; border: none;"));
+    errLabel->hide();
+    frameLayout->addWidget(errLabel);
+
+    // ── 숫자 키패드 ──
+    const QString keyBtnStyle = QStringLiteral(
+        "QPushButton { background: #1a1a2e; color: #00ff41; border: 1px solid #00ff41; "
+        "border-radius: 6px; font-size: 22px; font-weight: 900; font-family: Consolas; }"
+        "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"
+        "QPushButton:pressed { background: #00cc33; color: #0c0c0c; }");
+    const QString delBtnStyle = QStringLiteral(
+        "QPushButton { background: #1a1a2e; color: #ff4444; border: 1px solid #ff4444; "
+        "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
+        "QPushButton:hover { background: #ff4444; color: #0c0c0c; }");
+
+    auto *keypadWidget = new QWidget(frame);
+    auto *keypadGrid = new QGridLayout(keypadWidget);
+    keypadGrid->setContentsMargins(20, 0, 20, 0);
+    keypadGrid->setSpacing(8);
+
+    // 1-9
+    for (int i = 1; i <= 9; ++i) {
+        auto *btn = new QPushButton(QString::number(i), keypadWidget);
+        btn->setFixedSize(80, 50);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setStyleSheet(keyBtnStyle);
+        keypadGrid->addWidget(btn, (i - 1) / 3, (i - 1) % 3);
+        QObject::connect(btn, &QPushButton::clicked, dlg, [inputLine, btn, i]() {
+            if (inputLine->text().length() < 4) {
+                inputLine->setText(inputLine->text() + QString::number(i));
+                btn->setEnabled(false);
+                QTimer::singleShot(250, btn, [btn]() { btn->setEnabled(true); });
+            }
+        });
+    }
+    // 하단: [DEL] [0] [확인]
+    auto *delBtn = new QPushButton(QStringLiteral("⌫"), keypadWidget);
+    delBtn->setFixedSize(80, 50);
+    delBtn->setCursor(Qt::PointingHandCursor);
+    delBtn->setFocusPolicy(Qt::NoFocus);
+    delBtn->setStyleSheet(delBtnStyle);
+    keypadGrid->addWidget(delBtn, 3, 0);
+    QObject::connect(delBtn, &QPushButton::clicked, dlg, [inputLine, delBtn]() {
+        QString t = inputLine->text();
+        if (!t.isEmpty()) { t.chop(1); inputLine->setText(t); }
+        delBtn->setEnabled(false);
+        QTimer::singleShot(250, delBtn, [delBtn]() { delBtn->setEnabled(true); });
+    });
+
+    auto *zeroBtn = new QPushButton(QStringLiteral("0"), keypadWidget);
+    zeroBtn->setFixedSize(80, 50);
+    zeroBtn->setCursor(Qt::PointingHandCursor);
+    zeroBtn->setFocusPolicy(Qt::NoFocus);
+    zeroBtn->setStyleSheet(keyBtnStyle);
+    keypadGrid->addWidget(zeroBtn, 3, 1);
+    QObject::connect(zeroBtn, &QPushButton::clicked, dlg, [inputLine, zeroBtn]() {
+        if (inputLine->text().length() < 4) {
+            inputLine->setText(inputLine->text() + QStringLiteral("0"));
+            zeroBtn->setEnabled(false);
+            QTimer::singleShot(250, zeroBtn, [zeroBtn]() { zeroBtn->setEnabled(true); });
+        }
+    });
+
+    auto *submitBtn = new QPushButton(QStringLiteral("확인"), keypadWidget);
+    submitBtn->setFixedSize(80, 50);
+    submitBtn->setCursor(Qt::PointingHandCursor);
+    submitBtn->setFocusPolicy(Qt::NoFocus);
+    submitBtn->setStyleSheet(QStringLiteral(
+        "QPushButton { background: #0a1628; color: #00ff41; border: 2px solid #00ff41; "
+        "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
+        "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
+    auto *glow = new QGraphicsDropShadowEffect(submitBtn);
+    glow->setBlurRadius(16);
+    glow->setColor(QColor(0, 255, 157, 120));
+    glow->setOffset(0, 0);
+    submitBtn->setGraphicsEffect(glow);
+    keypadGrid->addWidget(submitBtn, 3, 2);
+
+    frameLayout->addWidget(keypadWidget);
+
+    mainLayout->addWidget(frame);
+
+    // 확인 버튼 클릭 시 검증 + 직접 엔딩 시퀀스 호출
+    QObject::connect(submitBtn, &QPushButton::clicked, dlg, [this, dlg, inputLine, errLabel, code, overlay, clearTime, rank, totalTeams, isLast]() {
+        QString input = inputLine->text().trimmed();
+        if (input.isEmpty()) {
+            errLabel->setText(QStringLiteral("코드를 입력해주세요."));
+            errLabel->show();
+            return;
+        }
+        if (input == code) {
+            // 서버에 확인 전송 (기록용)
+            if (m_serverMessageCb) {
+                QJsonObject msg;
+                msg["type"] = QStringLiteral("verify_recovery_code");
+                msg["code"] = input;
+                m_serverMessageCb(msg);
+            }
+            dlg->accept();
+            overlay->hide();
+            overlay->deleteLater();
+            // 직접 엔딩 시퀀스 시작 (서버 응답 대기 없음)
+            QTimer::singleShot(300, this, [this, clearTime, rank, totalTeams, isLast]() {
+                showEndingSequence(clearTime, rank, totalTeams, isLast);
+            });
+        } else {
+            errLabel->setText(QStringLiteral("❌ 잘못된 코드입니다. 다시 입력해주세요."));
+            errLabel->show();
+            inputLine->clear();
+        }
+    });
+
+    if (auto *screen = QApplication::primaryScreen()) {
+        const QRect geo = screen->availableGeometry();
+        dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+    }
+
+    dlg->exec();
+    overlay->hide();
+    overlay->deleteLater();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // ENDING SEQUENCE — delegated to ending/endingsequence.h
 // ════════════════════════════════════════════════════════════════════════════
-void ReadyPage::showEndingSequence()
+void ReadyPage::showEndingSequence(const QString &clearTime, int rank, int totalTeams, bool isLast)
 {
     EndingSequence::show(this, m_teamName, m_remainingSeconds);
 }

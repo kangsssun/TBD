@@ -345,10 +345,28 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         // TODO: 팀 일시정지/재개 UI 구현 필요
     }
     else if (type == "force_ending") {
-        qDebug() << "[GM_CMD] Force ending sequence";
+        // force_ending은 이제 서버에서 recovery_code로 처리됨
+        qDebug() << "[GM_CMD] Force ending — waiting for recovery_code";
+    }
+    else if (type == "recovery_code") {
+        QString code = json["code"].toString();
+        QString clearTime = json["clear_time"].toString();
+        int rank = json["rank"].toInt(0);
+        int totalTeams = json["total_teams"].toInt(0);
+        bool isLast = json["is_last"].toBool(false);
+        qDebug() << "[SYSTEM] Recovery code received:" << code << "rank:" << rank;
         if (m_readyPage) {
-            m_readyPage->showEndingSequence();
+            m_readyPage->showRecoveryCodeInput(code, clearTime, rank, totalTeams, isLast);
         }
+    }
+    else if (type == "recovery_code_wrong") {
+        qDebug() << "[SYSTEM] Recovery code wrong!";
+        // 노드에서 처리 — showRecoveryCodeInput 내부에서 처리
+    }
+    else if (type == "final_clear") {
+        // 이제 recovery_code 입력 성공 시 직접 showEndingSequence를 호출하므로
+        // 이 메시지는 무시 (중복 방지)
+        qDebug() << "[SYSTEM] Final clear message received (ignored — handled locally)";
     }
     else if (type == "qr_decode_result") {
         QString status = json["status"].toString();
