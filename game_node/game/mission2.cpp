@@ -213,7 +213,8 @@ void MissionPage::setupMission2()
     QTimer::singleShot(200, this, [this]() {
         generateNewTarget();
     });
-    m_wheelTimer->start();
+    // Timer will be started after story popup is dismissed
+    // (see showMission2Story)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -408,6 +409,11 @@ void MissionPage::showMission2Story()
         QStringLiteral("\u25b6 PROCEED"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
+
+    // Start gauge movement after story popup is dismissed
+    if (m_wheelTimer && !m_wheelTimer->isActive()) {
+        m_wheelTimer->start();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
