@@ -531,7 +531,7 @@ void MissionPage::showMission4Story()
         << QStringLiteral("<span style='color:#666; %1'>[17:27:14]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:15]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>수동으로 쿨러를 조작하여 서버를 억지로 냉각시키십시오.</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>수동으로 쿨러를 조작하여 서버를 냉각시키십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:16]</span>&nbsp;&nbsp;"
                           "<span style='color:#00bfff; %1'>목표 조건 : 23.0°C 이하 · 3초 유지</span>").arg(sf);
 
