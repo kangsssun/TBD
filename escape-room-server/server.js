@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const jsQR = require('jsqr');
 const Jimp = require('jimp');
+const { exec, spawn } = require('child_process');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +14,63 @@ const wss = new WebSocket.Server({ server });
 
 // 1. GM HTML 화면을 띄워주기 위한 정적 파일 서빙
 app.use(express.static('public'));
+
+// ── BGM 재생 시스템 ──────────────────────────────────────────────────────
+let bgmProcess = null;
+let bgmPlaying = false;
+const bgmFile = path.resolve(__dirname, '..', 'songs', 'title.wav');
+
+function startBgm() {
+    if (bgmPlaying && bgmProcess) return;
+    if (!fs.existsSync(bgmFile)) {
+        console.log('[BGM] 파일 없음:', bgmFile);
+        return;
+    }
+    const platform = process.platform;
+    const startLoop = () => {
+        if (!bgmPlaying) return;
+        let proc;
+        if (platform === 'win32') {
+            // Windows: PowerShell로 Media.SoundPlayer 사용
+            proc = spawn('powershell', ['-Command',
+                `$p = New-Object System.Media.SoundPlayer '${bgmFile.replace(/'/g, "''")}'; $p.PlaySync()`
+            ], { stdio: 'ignore' });
+        } else {
+            // Linux: aplay 사용
+            proc = spawn('aplay', [bgmFile], { stdio: 'ignore' });
+        }
+        bgmProcess = proc;
+        proc.on('close', () => {
+            if (bgmPlaying) startLoop(); // 루프 재생
+        });
+        proc.on('error', (err) => {
+            console.error('[BGM] 재생 에러:', err.message);
+            bgmPlaying = false;
+        });
+    };
+    bgmPlaying = true;
+    startLoop();
+    console.log('[BGM] 재생 시작:', bgmFile);
+}
+
+function stopBgm() {
+    bgmPlaying = false;
+    if (bgmProcess) {
+        bgmProcess.kill();
+        bgmProcess = null;
+    }
+    console.log('[BGM] 재생 중지');
+}
+
+// BGM 상태 API
+app.get('/api/bgm/status', (req, res) => {
+    res.json({ playing: bgmPlaying });
+});
+app.post('/api/bgm/toggle', (req, res) => {
+    if (bgmPlaying) { stopBgm(); } else { startBgm(); }
+    res.json({ playing: bgmPlaying });
+});
+// ─────────────────────────────────────────────────────────────────────────
 
 // 2. 서버 메모리에 현재 게임 상태 저장
 let gameState = {};
@@ -648,6 +706,8 @@ const TCP_PORT = 5000;
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`[SYSTEM] 방탈출 백엔드 서버(WebSocket/HTTP)가 http://127.0.0.1:${PORT} 에서 실행 중입니다.`);
+    // 서버 시작 시 BGM 자동 재생
+    startBgm();
 });
 
 tcpServer.listen(TCP_PORT, '0.0.0.0', () => {

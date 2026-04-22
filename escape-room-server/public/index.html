@@ -39,7 +39,7 @@
         .btn-action:hover { background:#1a5c9a; box-shadow:0 0 15px rgba(0,255,157,0.2); border-color:var(--neon-mint); }
         .btn-danger { background:rgba(255,51,102,0.15); color:var(--crimson); border:1px solid var(--crimson); padding:8px 16px; border-radius:4px; cursor:pointer; font-family:'Orbitron',sans-serif; font-size:0.7rem; letter-spacing:0.1em; transition:all 0.2s; }
         .btn-danger:hover { background:rgba(255,51,102,0.3); box-shadow:0 0 15px rgba(255,51,102,0.3); }
-        .log-panel { background:var(--bg-panel); border:1px solid rgba(0,255,157,0.15); font-size:0.7rem; max-height:300px; overflow-y:auto; }
+        .log-panel { background:var(--bg-panel); border:1px solid rgba(0,255,157,0.15); font-size:0.7rem; max-height:400px; overflow-y:auto; }
         .log-panel::-webkit-scrollbar { width:4px; }
         .log-panel::-webkit-scrollbar-thumb { background:var(--neon-mint-dim); border-radius:2px; }
         .log-entry { padding:3px 8px; border-bottom:1px solid rgba(0,255,157,0.05); }
@@ -121,6 +121,7 @@
                     <div class="grid grid-cols-2 gap-2">
                         <button class="btn-action text-xs py-2" onclick="playBaseMelody()">🔊 기준음</button>
                         <button class="btn-danger text-xs py-2" onclick="emergencyAllPause()">⚠ 전체정지</button>
+                        <button id="bgm-toggle" class="btn-action text-xs py-2" onclick="toggleBgm()" style="grid-column:span 2">🎵 BGM: 확인 중...</button>
                     </div>
                 </div>
             </div>
@@ -349,6 +350,17 @@
         }
 
         function playBaseMelody() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'chat_message',sender:'gm',target:'ALL',text:'🔊 기준 멜로디(도-레-미-파-솔) 전송됨'})); addChatLog('GM','ALL','🔊 기준 멜로디 전송'); }
+
+        function updateBgmButton(playing) {
+            const btn = document.getElementById('bgm-toggle');
+            if (!btn) return;
+            if (playing) { btn.innerText = '🎵 BGM: ON (클릭하여 OFF)'; btn.style.borderColor='var(--neon-mint)'; btn.style.color='var(--neon-mint)'; }
+            else { btn.innerText = '🔇 BGM: OFF (클릭하여 ON)'; btn.style.borderColor='var(--text-muted)'; btn.style.color='var(--text-muted)'; }
+        }
+        function fetchBgmStatus() { fetch('/api/bgm/status').then(r=>r.json()).then(d=>updateBgmButton(d.playing)).catch(()=>{}); }
+        function toggleBgm() { fetch('/api/bgm/toggle',{method:'POST'}).then(r=>r.json()).then(d=>{updateBgmButton(d.playing);addChatLog('SYSTEM','ALL',d.playing?'🎵 BGM 재생 시작':'🔇 BGM 재생 중지');}).catch(()=>{}); }
+        // 페이지 로드 시 BGM 상태 확인
+        setTimeout(fetchBgmStatus, 1000);
         function emergencyAllPause() { if(!gmSocket)return; gmSocket.send(JSON.stringify({type:'timer_control',action:'pause',team_id:'ALL'})); addChatLog('SYSTEM','ALL','⚠ 전체 노드 강제 일시정지'); }
 
         function resetTeam(teamId, teamName) {
