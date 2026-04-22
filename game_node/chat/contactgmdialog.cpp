@@ -152,9 +152,20 @@ public:
     QWidget *kb;
     QLineEdit *input;
     QWidget *root;
+    QDialog *dlg;
+    bool expanded = false;  // once expanded, stays expanded
 
     KbToggleFilter(QWidget *k, QLineEdit *i, QWidget *r, QObject *p)
-        : QObject(p), kb(k), input(i), root(r) {}
+        : QObject(p), kb(k), input(i), root(r), dlg(qobject_cast<QDialog*>(r)) {}
+
+    void expandDialog() {
+        if (!expanded && dlg) {
+            const QPoint oldCenter = dlg->geometry().center();
+            dlg->setFixedSize(760, 520);
+            dlg->move(oldCenter - QPoint(dlg->width() / 2, dlg->height() / 2));
+            expanded = true;
+        }
+    }
 
     bool eventFilter(QObject *watched, QEvent *ev) override {
         if (!kb || !input || !root || ev->type() != QEvent::MouseButtonPress) {
@@ -163,14 +174,17 @@ public:
 
         auto *me = static_cast<QMouseEvent *>(ev);
 
-        // 입력창 클릭 → 키패드 토글
+        // 입력창 클릭 → 키패드 표시 + 확장 (한번 확장되면 줄어들지 않음)
         const QRect inputRect(input->mapToGlobal(QPoint(0, 0)), input->size());
         if (inputRect.contains(me->globalPos())) {
-            kb->setVisible(!kb->isVisible());
+            if (!kb->isVisible()) {
+                kb->setVisible(true);
+                expandDialog();
+            }
             return false;
         }
 
-        // 팝업(dialog) 외부 클릭 → 키패드 닫기
+        // 팝업(dialog) 외부 클릭 → 키패드 닫기 (크기는 유지)
         if (kb->isVisible()) {
             const QRect rootRect(root->mapToGlobal(QPoint(0, 0)), root->size());
             if (!rootRect.contains(me->globalPos())) {
@@ -197,7 +211,7 @@ void ContactGmDialog::show(QWidget *parent, const QString &teamName,
     dialog.setModal(true);
     dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dialog.setAttribute(Qt::WA_StyledBackground, true);
-    dialog.setFixedSize(760, 520);
+    dialog.setFixedSize(760, 260);  // compact initially; expands for keyboard
 
     dialog.setStyleSheet(QStringLiteral(R"(
         QDialog#contactGmDialog {
