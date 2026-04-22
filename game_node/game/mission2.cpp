@@ -387,26 +387,26 @@ void MissionPage::showMission2Story()
     QStringList storyLines;
     storyLines
         << QStringLiteral("<span style='color:#666; %1'>[17:22:10]</span>&nbsp;&nbsp;"
-                          "<span style='color:#ff4444; %1'>[2단계 인증] 갓찌의 쳇바퀴 발전기</span>").arg(sf)
+                          "<span style='color:#ff4444; %1'>[2단계 인증] 비상 전력 공급</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:12]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>갓찌가 설치한 보안 발전기를 가동시켜야 합니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>끊어진 전선 때문에 시스템 메인 전력이 차단되었습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:13]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>전력 게이지가 좌우로 빠르게 움직입니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>비상용 수동 동력 발전기를 가동해야 합니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:14]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>노란색으로 표시된 안전 구간에 도달했을 때</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>전력 게이지가 좌우로 빠르게 움직입니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:15]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>정확히 [충전] 버튼을 눌러주세요.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>목표 안전 구간에 도달했을 때 정확히 [충전] 버튼을 누르십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:16]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:17]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>5회 연속 성공하면 발전기가 가동됩니다.</span>").arg(sf)
+                          "<span style='color:#eab308; %1'>5회 연속 성공하면 예비 전력이 정상 공급됩니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:22:18]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>실패하면 충전 횟수가 초기화됩니다. 집중하세요!</span>").arg(sf);
+                          "<span style='color:#eab308; %1'>실패하면 전력이 초기화됩니다. 집중하십시오!</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
         storyLines,
-        QStringLiteral("\u25b6 PROCEED"),
+        QStringLiteral("\u25b6 확인"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
 
@@ -430,17 +430,19 @@ void MissionPage::showMission2Result(bool correct)
     if (correct) {
         resultLines
             << QStringLiteral("<span style='color:#666; %1'>[17:23:30]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>발전기 출력 감지 중...</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>발전기 출력 모니터링 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:31]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>전력 충전 5회 성공 확인</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>임계 전력 100% 도달 확인</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:32]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>쳇바퀴 발전기 가동 완료</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>2단계 인증 성공</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:33]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:34]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>2단계 인증 성공</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>비상 전력이 공급되며 서버실에 불이 켜졌습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:35]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>갓찌가 쳇바퀴에서 내려왔습니다.</span>").arg(sf);
+                              "<span style='color:#00ff41; %1'>그 순간, 환풍구 쪽으로 재빠르게 도망치는 '작은 그림자'를 포착했습니다.</span>").arg(sf)
+            << QStringLiteral("<span style='color:#666; %1'>[17:23:36]</span>&nbsp;&nbsp;"
+                              "<span style='color:#eab308; %1'>그림자가 사라진 바닥에는 '해바라기씨'가 하나 떨어져 있습니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),
@@ -461,11 +463,11 @@ void MissionPage::showMission2Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:30]</span>&nbsp;&nbsp;"
                               "<span style='color:#ff4444; %1'>발전기 출력 불안정...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:31]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>충전 실패 — 전력 부족</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>충전 실패 — 전력 부족 감지</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:32]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:23:33]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>다시 시도하세요.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>타이밍이 어긋났습니다. 다시 시도하십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),

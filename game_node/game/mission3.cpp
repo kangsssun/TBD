@@ -318,26 +318,24 @@ void MissionPage::showMission3Story()
     QStringList storyLines;
     storyLines
         << QStringLiteral("<span style='color:#666; %1'>[17:25:10]</span>&nbsp;&nbsp;"
-                          "<span style='color:#ff4444; %1'>[3단계 인증]</span>").arg(sf)
+                          "<span style='color:#ff4444; %1'>[4단계 인증] 관리자 권한 토큰 복원</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:11]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>비콘 부품 일부가 사라진 위치를 확인했습니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>퇴실 권한을 얻기 위한 물리 보안 토큰(QR)이 파손되어 있습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:12]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>주변에 해바라기씨 껍질 다수 발견.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>조각난 부품 주변에 아주 작은 '발자국'들이 찍혀있습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:13]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>용의자가 특정되고 있습니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>용의자가 자신의 정체를 숨기기 위해 부품을 섞어버렸습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:14]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:15]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>3단계 인증 코드는 뒤섞인 부품에 담겨있습니다.</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>뒤섞인 QR 코드를 올바르게 조립하고 카메라 모듈로 스캔하십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:25:16]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>이를 다시 조립하여 스캔하십시오.</span>").arg(sf)
-        << QStringLiteral("<span style='color:#666; %1'>[17:25:17]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>행운을 기원합니다.</span>").arg(sf);
+                          "<span style='color:#00bfff; %1'>권한을 얻으면 서버실 내부 CCTV를 확인할 수 있습니다.</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
         storyLines,
-        QStringLiteral("\u25b6 PROCEED"),
+        QStringLiteral("\u25b6 확인"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
 }
@@ -356,19 +354,19 @@ void MissionPage::showMission3Result(bool correct)
     if (correct) {
         resultLines
             << QStringLiteral("<span style='color:#666; %1'>[17:26:20]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>QR 스캔 감지됨</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>관리자 물리 보안 토큰 일치</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:21]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>물리 보안 토큰 일치</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>4단계 인증 성공 / 관리자 권한 획득</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:22]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>3단계 인증 성공</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:26:23]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
+            << QStringLiteral("<span style='color:#666; %1'>[17:26:23]</span>&nbsp;&nbsp;"
+                              "<span style='color:#00ff41; %1'>내부 CCTV 영상이 복구되었습니다. 영상을 확인합니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:24]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>뒤섞인 부품을 잘 조립했습니다.</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>전선을 갉아먹고, 해바라기씨를 숨기고, 부품을 부수던 범인은...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>숨긴 장소가 너무 허술했습니다.</span>").arg(sf)
+                              "<span style='color:#eab308; %1'>부트캠프 마스코트, 햄스터 '갓찌'입니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:26]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>용의자가 자아비판 중인 것 같습니다.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>수료식 날, 떠나는 교육생들과 헤어지기 싫었던 갓찌의 아쉬움이 빚어낸 소동이었습니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),
@@ -387,19 +385,17 @@ void MissionPage::showMission3Result(bool correct)
     } else {
         resultLines
             << QStringLiteral("<span style='color:#666; %1'>[17:26:20]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>QR 코드 스캔 감지</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>카메라 모듈 QR 스캔 감지</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:21]</span>&nbsp;&nbsp;"
                               "<span style='color:#ff4444; %1'>코드 유효성 검증 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:22]</span>&nbsp;&nbsp;"
                               "<span style='color:#ff4444; %1'>미등록 코드 확인됨</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>3단계 물리 보안 인증 실패</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>4단계 인증 실패</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:24]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:26:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>스캔된 코드가 인증 코드와 일치하지 않습니다.</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:26:26]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>올바른 QR 코드로 다시 조합하십시오.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>올바른 배열로 다시 조합하여 스캔하십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),

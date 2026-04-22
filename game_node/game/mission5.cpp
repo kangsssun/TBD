@@ -49,9 +49,10 @@ constexpr double PLAYER_R = 12.0;     // player radius
 constexpr double GOAL_SIZE = 30.0;
 
 // ── Physics constants ───────────────────────────────────────────────────
-constexpr double ACCEL_SCALE  = 0.004;
-constexpr double FRICTION     = 0.87;
-constexpr double MAX_SPEED    = 2.2;
+constexpr double MOVE_SPEED   = 2.4;   // max movement speed
+constexpr double DEAD_ZONE    = 12.0;  // gyro dead zone (ignore small tilt)
+constexpr double MAX_TILT     = 50.0;  // tilt where speed reaches max
+constexpr double SMOOTH_ALPHA = 0.25;  // EMA smoothing (0=no change, 1=instant)
 constexpr int    TICK_MS      = 16;    // ~60 FPS
 
 // ── Start / Goal positions ──────────────────────────────────────────────
@@ -151,7 +152,7 @@ public:
         // Ensure fitInView fires after layout is settled
         QTimer::singleShot(0, this, [this]() { fitViewToScene(); });
 
-        startGame();
+        // Game does NOT auto-start; call beginGame() after popups
     }
 
     ~MazeGameWidget() override
@@ -161,6 +162,13 @@ public:
 
     // Callback: set by MissionPage to trigger showResultPopup
     std::function<void()> onGoalReached;
+
+    // Called after game-start popup is dismissed
+    void beginGame()
+    {
+        calibrateGyro();
+        startGame();
+    }
 
 private:
     QGraphicsScene *m_scene;
@@ -182,6 +190,10 @@ private:
     bool m_invincible = false;
     int  m_invincibleCounter = 0;
     int  m_stunCounter = 0;
+    double m_pitchOffset = 0.0;   // gyro calibration offsets
+    double m_rollOffset  = 0.0;
+    double m_smoothPitch = 0.0;    // smoothed gyro input
+    double m_smoothRoll  = 0.0;
 
     // Moving obstacles
     struct MovingObs {
@@ -496,9 +508,8 @@ private:
         m_invincible = true;
         m_invincibleCounter = 0;
 
-        // Bounce player back
-        m_player->vx = -m_player->vx * 1.5;
-        m_player->vy = -m_player->vy * 1.5;
+        m_player->vx = 0.0;
+        m_player->vy = 0.0;
 
         if (m_hearts <= 0) {
             // All hearts lost → full reset
@@ -536,12 +547,38 @@ private:
         QObject::connect(m_zyroTimer, &QTimer::timeout, this, [this]() {
             int x = 0, y = 0;
             if (zyro_get_value(&x, &y) == 0) {
-                m_pitchInput = static_cast<double>(x);
-                m_rollInput  = static_cast<double>(y);
+                m_pitchInput = static_cast<double>(x) - m_pitchOffset;
+                m_rollInput  = static_cast<double>(y) - m_rollOffset;
             }
         });
         m_zyroTimer->start();
 #endif
+    }
+
+    void calibrateGyro()
+    {
+#ifdef Q_OS_LINUX
+        // Read current sensor value and use as zero-offset
+        if (m_zyroReady) {
+            int x = 0, y = 0;
+            if (zyro_get_value(&x, &y) == 0) {
+                m_pitchOffset = static_cast<double>(x);
+                m_rollOffset  = static_cast<double>(y);
+            }
+        } else {
+            // If not yet polling, start temporarily to read
+            if (board_sync() == 0 && init_event_thread() == 0) {
+                m_zyroReady = true;
+                int x = 0, y = 0;
+                if (zyro_get_value(&x, &y) == 0) {
+                    m_pitchOffset = static_cast<double>(x);
+                    m_rollOffset  = static_cast<double>(y);
+                }
+            }
+        }
+#endif
+        m_pitchInput = 0.0;
+        m_rollInput  = 0.0;
     }
 
     void stopZyroPolling()
@@ -596,14 +633,25 @@ private:
             rot.item->setPos(nx, ny);
         }
 
-        // 1) gyro input → acceleration → velocity (inverted)
-        const double ax = -m_rollInput  * ACCEL_SCALE;
-        const double ay = -m_pitchInput * ACCEL_SCALE;
+        // 1) gyro input → smoothed, proportional speed with dead zone
+        m_smoothRoll  = m_smoothRoll  + SMOOTH_ALPHA * (m_rollInput  - m_smoothRoll);
+        m_smoothPitch = m_smoothPitch + SMOOTH_ALPHA * (m_pitchInput - m_smoothPitch);
 
-        m_player->vx = qBound(-MAX_SPEED,
-                               (m_player->vx + ax) * FRICTION, MAX_SPEED);
-        m_player->vy = qBound(-MAX_SPEED,
-                               (m_player->vy + ay) * FRICTION, MAX_SPEED);
+        double vx = 0.0;
+        double vy = 0.0;
+        const double absRoll  = std::abs(m_smoothRoll);
+        const double absPitch = std::abs(m_smoothPitch);
+        if (absRoll > DEAD_ZONE) {
+            const double t = qBound(0.0, (absRoll - DEAD_ZONE) / (MAX_TILT - DEAD_ZONE), 1.0);
+            vx = (m_smoothRoll > 0) ? -MOVE_SPEED * t : MOVE_SPEED * t;
+        }
+        if (absPitch > DEAD_ZONE) {
+            const double t = qBound(0.0, (absPitch - DEAD_ZONE) / (MAX_TILT - DEAD_ZONE), 1.0);
+            vy = (m_smoothPitch > 0) ? -MOVE_SPEED * t : MOVE_SPEED * t;
+        }
+
+        m_player->vx = vx;
+        m_player->vy = vy;
 
         // 2) save previous position, then move
         const double prevX = m_player->pos().x();
@@ -631,9 +679,10 @@ private:
         // 4) collision — check laser walls (push back + damage if not invincible)
         for (auto *wall : m_innerWalls) {
             if (m_player->collidesWithItem(wall)) {
-                // Push back in the opposite direction of movement
-                double dx = prevX - newX;
-                double dy = prevY - newY;
+                // Push back away from wall center
+                const QRectF wb = wall->sceneBoundingRect();
+                double dx = m_player->pos().x() - (wb.left() + wb.width() * 0.5);
+                double dy = m_player->pos().y() - (wb.top() + wb.height() * 0.5);
                 const double dist = std::sqrt(dx * dx + dy * dy);
                 if (dist > 0.01) { dx /= dist; dy /= dist; }
                 else { dx = 0.0; dy = -1.0; }
@@ -658,8 +707,9 @@ private:
         // 5) check moving obstacles
         for (const auto &obs : m_movingObs) {
             if (m_player->collidesWithItem(obs.item)) {
-                double dx = prevX - newX;
-                double dy = prevY - newY;
+                // Push back away from obstacle center
+                double dx = m_player->pos().x() - obs.item->pos().x();
+                double dy = m_player->pos().y() - obs.item->pos().y();
                 const double dist = std::sqrt(dx * dx + dy * dy);
                 if (dist > 0.01) { dx /= dist; dy /= dist; }
                 else { dx = 0.0; dy = -1.0; }
@@ -682,8 +732,9 @@ private:
         // 6) check rotating obstacles
         for (const auto &rot : m_rotatingObs) {
             if (m_player->collidesWithItem(rot.item)) {
-                double dx = prevX - newX;
-                double dy = prevY - newY;
+                // Push back away from obstacle center
+                double dx = m_player->pos().x() - rot.item->pos().x();
+                double dy = m_player->pos().y() - rot.item->pos().y();
                 const double dist = std::sqrt(dx * dx + dy * dy);
                 if (dist > 0.01) { dx /= dist; dy /= dist; }
                 else { dx = 0.0; dy = -1.0; }
@@ -766,8 +817,12 @@ void MissionPage::setupMission5()
 
     // Maze game widget (directly under divider, no wrapper panel)
     auto *mazeGame = new MazeGameWidget(page);
+    mazeGame->setObjectName(QStringLiteral("mission5MazeGame"));
     mazeGame->onGoalReached = [this]() {
         showResultPopup(true);
+    };
+    m_mission5StartCb = [mazeGame]() {
+        mazeGame->beginGame();
     };
     pageLayout->addWidget(mazeGame, 1);
 
@@ -786,28 +841,64 @@ void MissionPage::showMission5Story()
     QStringList storyLines;
     storyLines
         << QStringLiteral("<span style='color:#666; %1'>[17:29:10]</span>&nbsp;&nbsp;"
-                          "<span style='color:#ff4444; %1'>[5단계 인증] 최종 관문 — 레이저 미로</span>").arg(sf)
+                          "<span style='color:#ff4444; %1'>[5단계 인증] 갓찌의 마지막 함정 — 레이저 미로</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:11]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>갓찌가 마지막으로 설치한 물리 잠금장치입니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>정체가 탄로 난 갓찌가 최후의 수단으로</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:12]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>단말기를 기울여 데이터 코어를 레이저 사이로</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>정밀 레이저 보안망을 가동했습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:13]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>통과시켜 GOAL 지점까지 이동시키세요.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>마스터 코드가 담긴 데이터 코어가 이 안에 갇혀있습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:14]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:15]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>레이저에 닿으면 체력(♥)이 1 감소합니다.</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>단말기(자이로 센서)를 기울여 데이터 코어를</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:16]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>체력이 모두 소진되면 처음부터 재시작됩니다.</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>레이저에 닿지 않게 GOAL 지점까지 안전하게 빼내십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:17]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>손이 떨리면 갓찌가 웃습니다.</span>").arg(sf);
+                          "<span style='color:#eab308; %1'>체력(♥)이 모두 소진되면 갓찌가 비웃으며 처음으로 되돌립니다!</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
         storyLines,
-        QStringLiteral("\u25b6 PROCEED"),
+        QStringLiteral("\u25b6 확인"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
+
+    // ── Show game-start popup after story ────────────────────────────
+    showMission5StartPopup();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mission 5 — Game start popup (calibrate gyro & begin)
+// ═══════════════════════════════════════════════════════════════════════════
+void MissionPage::showMission5StartPopup()
+{
+    const QString sf = QStringLiteral(
+        "font-size:16px; font-family:Consolas,Courier New,monospace; "
+        "font-weight:500; letter-spacing:-1px;");
+
+    QStringList lines;
+    lines
+        << QStringLiteral("<span style='color:#666; %1'>[17:29:20]</span>&nbsp;&nbsp;"
+                          "<span style='color:#00bfff; %1'>단말기를 평평한 곳에 놓아주세요.</span>").arg(sf)
+        << QStringLiteral("<span style='color:#666; %1'>[17:29:21]</span>&nbsp;&nbsp;"
+                          "<span style='color:#00bfff; %1'>현재 위치가 기준점으로 설정됩니다.</span>").arg(sf)
+        << QStringLiteral("<span style='color:#666; %1'>[17:29:22]</span>&nbsp;&nbsp;"
+                          "<span style='color:#888; %1'>...</span>").arg(sf)
+        << QStringLiteral("<span style='color:#666; %1'>[17:29:23]</span>&nbsp;&nbsp;"
+                          "<span style='color:#eab308; %1'>준비되면 아래 버튼을 눌러 시작하세요.</span>").arg(sf);
+
+    showTerminalPopup(
+        QStringLiteral("GYRO_CALIBRATION.exe"),
+        lines,
+        QStringLiteral("\u25b6 게임 시작"),
+        QStringLiteral("#00bfff"),
+        QColor(0, 191, 255, 140));
+
+    // After popup dismissed → calibrate & start game
+    if (m_mission5StartCb) {
+        m_mission5StartCb();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -824,17 +915,17 @@ void MissionPage::showMission5Result(bool correct)
     if (correct) {
         resultLines
             << QStringLiteral("<span style='color:#666; %1'>[17:30:20]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>레이저 미로 스캔 중...</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>레이저 미로 보안망 무력화 성공</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:30:21]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>데이터 코어 GOAL 도달 확인</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>데이터 코어 확보 완료</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:30:22]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>물리 잠금장치 해제 완료</span>").arg(sf)
+                              "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:30:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>금고 잠금 해제됨</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>도망치려던 갓찌를 검거했습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:30:24]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>퇴근 코드 생성 중...</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>패스트파이브 출입 시스템 및 비콘 복구 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:30:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>전 단계 인증 완료</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>마스터 퇴근 코드가 발급됩니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),

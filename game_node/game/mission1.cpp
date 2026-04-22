@@ -250,26 +250,26 @@ void MissionPage::showMission1Story()
     QStringList storyLines;
     storyLines
         << QStringLiteral("<span style='color:#666; %1'>[17:20:44]</span>&nbsp;&nbsp;"
-                          "<span style='color:#ff4444; %1'>[1단계 인증]</span>").arg(sf)
+                          "<span style='color:#ff4444; %1'>[1단계 인증] 시스템 로그 분석</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:45]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:45]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>비콘 장애 원인을 조사합니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>먼저 비콘 통신 장애의 원인을 조사해야 합니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:46]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>손상된 장치에서 마지막 통신 로그가 복구되었습니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>메인 서버에서 마지막 통신 로그를 확보했습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:47]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>장애 직전 비콘이 수신한 신호 데이터가 남아있습니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>장애 직전 비콘이 수신한 암호화된 신호가 남아있습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:49]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>LED 점멸 신호를 해독하여 1단계 인증 코드를 입력하십시오.</span>").arg(sf)
+                          "<span style='color:#00bfff; %1'>PLAY 버튼을 눌러 LED 점멸 신호(모스부호)를 확인하고</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:20:50]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>신호는 PLAY 버튼 클릭 시 LED 2에 나타납니다.</span>").arg(sf);
+                          "<span style='color:#00bfff; %1'>해독된 1단계 인증 코드를 입력하십시오.</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
         storyLines,
-        QStringLiteral("\u25b6 PROCEED"),
+        QStringLiteral("\u25b6 확인"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
 }
@@ -294,13 +294,13 @@ void MissionPage::showMission1Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>신호를 해독했습니다.</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>통신 로그 복호화가 완료되었습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:17]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>그런데... 비콘이 단순 장애라기엔 갉힌 흔적이 있습니다.</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>단순한 소프트웨어 오류가 아닙니다.</span>").arg(sf)
+            << QStringLiteral("<span style='color:#666; %1'>[17:21:18]</span>&nbsp;&nbsp;"
+                              "<span style='color:#00ff41; %1'>비콘 메인보드 전선이 예리하게 절단되어 있습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:19]</span>&nbsp;&nbsp;"
-                              "<span style='color:#888; %1'>...</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:21:19]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>누군가 의도적으로 망가뜨린 것 같습니다.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>누군가... 아니, '무언가'가 이빨로 갉아먹은 흔적입니다.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),
@@ -327,11 +327,11 @@ void MissionPage::showMission1Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:16]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>입력한 코드가 등록된 신호와 일치하지 않습니다.</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>해독된 코드가 시스템 로그와 일치하지 않습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:18]</span>&nbsp;&nbsp;"
                               "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:21:18]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>신호를 처음부터 다시 확인하십시오.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>신호를 처음부터 다시 분석하십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),

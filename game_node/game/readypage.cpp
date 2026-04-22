@@ -214,14 +214,14 @@ void ReadyPage::setupUi()
 {
     setObjectName(QStringLiteral("readyPage"));
     auto *readyPageLayout = new QVBoxLayout(this);
-    readyPageLayout->setContentsMargins(8, 8, 8, 8);
+    readyPageLayout->setContentsMargins(4, 4, 4, 4);
     readyPageLayout->setSpacing(0);
 
     auto *mainPanel = new QWidget(this);
     mainPanel->setObjectName(QStringLiteral("hackerMainPanel"));
     auto *mainPanelLayout = new QVBoxLayout(mainPanel);
-    mainPanelLayout->setContentsMargins(12, 10, 12, 10);
-    mainPanelLayout->setSpacing(8);
+    mainPanelLayout->setContentsMargins(8, 6, 8, 4);
+    mainPanelLayout->setSpacing(4);
 
     // ── Top bar ────────────────────────────────────────────────────────
     auto *topBar = new QWidget(mainPanel);
@@ -301,7 +301,12 @@ void ReadyPage::setupUi()
             auto *cur = currentMission();
             if (!cur) return;
             const int curNum = cur->missionNumber();
-            if (curNum >= 5) return; // already at last mission
+            if (curNum >= 5) {
+                // Last mission: go to ending
+                helpButton->setEnabled(false);
+                showEndingSequence();
+                return;
+            }
 
             // Prevent rapid repeated clicks from skipping multiple missions
             helpButton->setEnabled(false);
@@ -517,8 +522,8 @@ void ReadyPage::setupUi()
     auto *eventContainer = new QWidget(mainPanel);
     eventContainer->setObjectName(QStringLiteral("eventContainer"));
     m_eventLayout = new QVBoxLayout(eventContainer);
-    m_eventLayout->setContentsMargins(8, 8, 8, 8);
-    m_eventLayout->setSpacing(8);
+    m_eventLayout->setContentsMargins(4, 2, 4, 2);
+    m_eventLayout->setSpacing(4);
 
     auto *eventTitle = new QLabel(QStringLiteral("MISSION 1 - SYSTEM RECOVERY"), eventContainer);
     eventTitle->setObjectName(QStringLiteral("eventTitleLabel"));

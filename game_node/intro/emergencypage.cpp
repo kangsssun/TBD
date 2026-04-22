@@ -49,12 +49,13 @@ void EmergencyPage::setupUi()
     storyLayout->setSpacing(0);
 
     auto *storyLabel = new QLabel(
-        QStringLiteral("LG전자 SW bootcamp 12기에 긴급 공문이 내려왔다.\n\n"
-                       "때는 2026년 SW Boot Camp 수료식 당일..\n\n"
-                       "모든 교육을 마치고 드디어 퇴근하려는 순간, 퇴실 비콘이 먹통 됐다.\n\n"
-                       "비콘 뿐만 아니라 패스트파이브 엘리베이터도, 출입문도 전부 잠겼다.\n\n"
-                       "남은 시간 안에 시스템 복구 코드를 찾아 탈출하라.\n\n"
-                       "실패하면, 영원히 이곳에 갇힌다."),
+        QStringLiteral("LG전자 SW Bootcamp 12기에 긴급 공문이 하달되었습니다.\n\n"
+                       "때는 2026년 SW Boot Camp 수료식 당일.\n\n"
+                       "모든 교육을 마치고 퇴근하려는 순간, 퇴실 비콘이 먹통이 되었습니다.\n\n"
+                       "비콘뿐만 아니라 패스트파이브 엘리베이터와 출입문도 전부 잠겼습니다.\n\n"
+                       "누군가 의도적으로 시스템을 마비시킨 것이 분명합니다.\n\n"
+                       "남은 시간 안에 단서를 모아 시스템을 복구하고 탈출하십시오.\n\n"
+                       "실패할 경우, 영원히 이곳에 갇히게 됩니다."),
         m_storyLayer);
     storyLabel->setAlignment(Qt::AlignCenter);
     storyLabel->setWordWrap(true);
@@ -153,10 +154,10 @@ void EmergencyPage::setupUi()
     const QString noticeTextStyle = QStringLiteral("color:#ffffff; font-size:18px; font-weight:700; line-height:148%; border:none; background:transparent;");
 
     auto *noticeBody = new QLabel(
-        QStringLiteral("비콘 및 패스트 파이브 출입 시스템 전면에 장애가 발생했습니다.\n\n"
-                       "원인은 아직 밝혀지지 않았으며 복구 시까지 모든 교육생은 퇴실 불가입니다.\n\n"
-                       "5단계 인증을 통해 시스템 복구 코드를 획득한 팀부터 순서대로 퇴실이 승인됩니다.\n\n"
-                       "- LG SW Bootcamp 12기 교육 담당자 드림 -"),
+        QStringLiteral("비콘 및 패스트 파이브 출입 시스템 전면에 원인 불명의 장애가 발생했습니다.\n\n"
+                       "복구 시까지 모든 교육생은 퇴실 불가입니다.\n\n"
+                       "5단계 인증을 통해 마스터 복구 코드를 획득한 팀부터 순서대로 퇴실이 승인됩니다.\n\n"
+                       "LG SW Bootcamp 12기 교육 담당자 드림 -"),
         textContainer);
     noticeBody->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     noticeBody->setWordWrap(true);

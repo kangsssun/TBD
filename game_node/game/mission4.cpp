@@ -521,26 +521,24 @@ void MissionPage::showMission4Story()
     QStringList storyLines;
     storyLines
         << QStringLiteral("<span style='color:#666; %1'>[17:27:10]</span>&nbsp;&nbsp;"
-                          "<span style='color:#ff4444; %1'>[4단계 인증]</span>").arg(sf)
+                          "<span style='color:#ff4444; %1'>[3단계 인증] 서버 쿨링 시스템 복구</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:11]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>환풍구 이물질 확인됨.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>전력이 복구되었지만, 서버 온도가 급상승 중입니다!</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:12]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>성분 분석 결과 : 해바라기씨 껍질.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>누군가 쿨링 팬이 돌아가지 못하도록 환풍구를 꽉 막아두었습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:13]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>갓찌가 서버 환풍구를 막아놨습니다.</span>").arg(sf)
+                          "<span style='color:#00ff41; %1'>이대로면 시스템이 녹아내려 영원히 탈출할 수 없습니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:14]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00ff41; %1'>지금 이 순간에도 서버가 과열되고 있습니다.</span>").arg(sf)
-        << QStringLiteral("<span style='color:#666; %1'>[17:27:15]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
+        << QStringLiteral("<span style='color:#666; %1'>[17:27:15]</span>&nbsp;&nbsp;"
+                          "<span style='color:#00bfff; %1'>수동으로 쿨러를 조작하여 서버를 억지로 냉각시키십시오.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:27:16]</span>&nbsp;&nbsp;"
-                          "<span style='color:#00bfff; %1'>4단계 인증은 온도 기반입니다.</span>").arg(sf)
-        << QStringLiteral("<span style='color:#666; %1'>[17:27:17]</span>&nbsp;&nbsp;"
                           "<span style='color:#00bfff; %1'>목표 조건 : 23.0°C 이하 · 3초 유지</span>").arg(sf);
 
     showTerminalPopup(
         QStringLiteral("SECURITY_TERMINAL.exe"),
         storyLines,
-        QStringLiteral("\u25b6 PROCEED"),
+        QStringLiteral("\u25b6 확인"),
         QStringLiteral("#00ff41"),
         QColor(0, 255, 65, 140));
 }
@@ -561,17 +559,17 @@ void MissionPage::showMission4Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:20]</span>&nbsp;&nbsp;"
                               "<span style='color:#00ff41; %1'>서버 온도 모니터링 중...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:21]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>현재 온도 : 22.8°C</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>현재 온도 : 22.8°C / 3초 유지 완료</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:22]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>23.0°C 이하 진입 확인</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>3단계 인증 성공</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>목표 온도 3초 유지 완료</span>").arg(sf)
+                              "<span style='color:#888; %1'>...</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:24]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>냉각 시스템 재가동</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>온도가 안정화되며 환풍구를 막고 있던 이물질이 쏟아져 내렸습니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#00ff41; %1'>서버 온도 정상화 완료</span>").arg(sf)
+                              "<span style='color:#00ff41; %1'>엄청난 양의 '해바라기씨 껍질' 무더기입니다.</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:26]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>갓찌의 표정이 점점 어두워지고 있습니다.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>이 건물에 해바라기씨를 은닉할 만한 짐승은 단 하나뿐입니다... 설마?</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),
@@ -596,11 +594,9 @@ void MissionPage::showMission4Result(bool correct)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:22]</span>&nbsp;&nbsp;"
                               "<span style='color:#ff4444; %1'>목표 온도 미달성</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:23]</span>&nbsp;&nbsp;"
-                              "<span style='color:#ff4444; %1'>서버 온도가 아직 충분히 내려가지 않았습니다.</span>").arg(sf)
+                              "<span style='color:#ff4444; %1'>쓰로틀링(Throttling)이 발생하기 일보 직전입니다!</span>").arg(sf)
             << QStringLiteral("<span style='color:#666; %1'>[17:28:24]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>냉각이 필요합니다.</span>").arg(sf)
-            << QStringLiteral("<span style='color:#666; %1'>[17:28:25]</span>&nbsp;&nbsp;"
-                              "<span style='color:#eab308; %1'>온도를 23.0°C 이하로 낮추십시오.</span>").arg(sf);
+                              "<span style='color:#eab308; %1'>신속히 온도를 23.0°C 이하로 낮추십시오.</span>").arg(sf);
 
         showTerminalPopup(
             QStringLiteral("SYSTEM_VERIFY.exe"),

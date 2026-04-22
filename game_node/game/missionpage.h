@@ -75,6 +75,7 @@ private:
     void showMission4Story();
     void showMission4Result(bool correct);
     void showMission5Story();
+    void showMission5StartPopup();
     void showMission5Result(bool correct);
     void showImagePopup(const QString &imagePath,
                         const QString &btnText,
@@ -152,6 +153,9 @@ private:
     QWidget      *m_bottomArrowRow = nullptr;
 
     static constexpr int MAX_SUCCESS = 5;
+
+    // Mission 5 game start callback
+    std::function<void()> m_mission5StartCb;
 
     static bool s_operatorMode;
 };

@@ -441,7 +441,9 @@ void MissionPage::showTerminalPopup(const QString &title,
     glow->setOffset(0, 0);
     closeBtn->setGraphicsEffect(glow);
 
-    QObject::connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+    QObject::connect(closeBtn, &QPushButton::clicked, dialog, [dialog]() {
+        QTimer::singleShot(100, dialog, &QDialog::accept);
+    });
 
     closeBtnLayout->addStretch();
     closeBtnLayout->addWidget(closeBtn);
@@ -498,6 +500,11 @@ void MissionPage::showTerminalPopup(const QString &title,
     overlay->hide();
     overlay->deleteLater();
 
+    // Flush pending mouse/touch events to prevent click-through
+    // to widgets behind the popup (e.g. INPUT button on mission 1)
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    QApplication::processEvents(QEventLoop::AllEvents, 50);
+
     if (m_missionNumber == 3) {
         m_mission3StoryPopupDismissed = true;
         evaluateMission3CameraPreview();
@@ -514,14 +521,7 @@ void MissionPage::showStoryPopup()
         evaluateMission3CameraPreview();
     }
 
-    // 운영자 모드: 스토리 팝업 스킵
-    if (s_operatorMode) {
-        // Mission 2: start gauge timer immediately when skipping story
-        if (m_missionNumber == 2 && m_wheelTimer && !m_wheelTimer->isActive()) {
-            m_wheelTimer->start();
-        }
-        return;
-    }
+    // 운영자 모드에서도 스토리 팝업은 표시 (스킵 제거)
 
     switch (m_missionNumber) {
     case 1: showMission1Story(); break;
@@ -615,7 +615,9 @@ void MissionPage::showImagePopup(const QString &imagePath,
     glow->setOffset(0, 0);
     closeBtn->setGraphicsEffect(glow);
 
-    QObject::connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+    QObject::connect(closeBtn, &QPushButton::clicked, dialog, [dialog]() {
+        QTimer::singleShot(100, dialog, &QDialog::accept);
+    });
 
     // Delay-enable button to prevent accidental dismiss
     QTimer::singleShot(1000, closeBtn, [closeBtn]() {
