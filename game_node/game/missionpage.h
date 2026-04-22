@@ -14,6 +14,7 @@ class QShowEvent;
 class QHideEvent;
 class QSlider;
 class QGraphicsOpacityEffect;
+class QProgressBar;
 
 /**
  * @brief Base class for all mission pages.
@@ -123,6 +124,34 @@ private:
     QLabel *m_mission2ResultLabel = nullptr;
     QSlider *m_mission2Slider = nullptr;
     QGraphicsOpacityEffect *m_mission2NoiseEffect = nullptr;
+
+    // Mission 2 wheel generator game
+    void updateWheelGauge();
+    void onChargeButtonClicked();
+    void generateNewTarget();
+    void checkGameClear();
+
+    QProgressBar *m_wheelProgressBar = nullptr;
+    QLabel       *m_wheelTargetLabel = nullptr;
+    QLabel       *m_wheelStatusLabel = nullptr;
+    QPushButton  *m_chargeButton = nullptr;
+    QTimer       *m_wheelTimer = nullptr;
+    int           m_gaugeValue = 0;
+    bool          m_movingUp = true;
+    int           m_targetMin = 0;
+    int           m_targetMax = 0;
+    int           m_successCount = 0;
+    QWidget      *m_gaugeContainer = nullptr;
+    QLabel       *m_safeZoneMarker = nullptr;
+    QLabel       *m_safeZoneOverlay = nullptr;
+    QLabel       *m_arrowTopLeft = nullptr;
+    QLabel       *m_arrowTopRight = nullptr;
+    QLabel       *m_arrowBottomLeft = nullptr;
+    QLabel       *m_arrowBottomRight = nullptr;
+    QWidget      *m_topArrowRow = nullptr;
+    QWidget      *m_bottomArrowRow = nullptr;
+
+    static constexpr int MAX_SUCCESS = 5;
 
     static bool s_operatorMode;
 };
