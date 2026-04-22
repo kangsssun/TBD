@@ -14,12 +14,14 @@
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsRectItem>
+#include <QGraphicsPixmapItem>
 #include <QGraphicsTextItem>
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QSlider>
 #include <QBrush>
 #include <QPen>
+#include <QPixmap>
 #include <QRadialGradient>
 #include <QLinearGradient>
 #include <QFont>
@@ -38,43 +40,47 @@ extern "C" {
 namespace {
 
 // ── Scene dimensions ────────────────────────────────────────────────────
-constexpr double SCENE_W  = 900.0;
+constexpr double SCENE_W  = 1200.0;
 constexpr double SCENE_H  = 400.0;
 constexpr double WALL_T   = 6.0;      // wall / laser thickness
-constexpr double PLAYER_R = 8.0;      // player radius
+constexpr double PLAYER_R = 12.0;     // player radius
 constexpr double GOAL_SIZE = 30.0;
 
 // ── Physics constants ───────────────────────────────────────────────────
-constexpr double ACCEL_SCALE  = 0.005;
-constexpr double FRICTION     = 0.88;
-constexpr double MAX_SPEED    = 2.5;
+constexpr double ACCEL_SCALE  = 0.003;
+constexpr double FRICTION     = 0.85;
+constexpr double MAX_SPEED    = 1.8;
 constexpr int    TICK_MS      = 16;    // ~60 FPS
 
 // ── Start / Goal positions ──────────────────────────────────────────────
 constexpr double START_X = 30.0;
 constexpr double START_Y = 30.0;
-constexpr double GOAL_X  = SCENE_W - GOAL_SIZE - 15.0;
-constexpr double GOAL_Y  = SCENE_H - GOAL_SIZE - 15.0;
+constexpr double GOAL_X  = 10.0;
+constexpr double GOAL_Y  = SCENE_H - GOAL_SIZE - 10.0;
+
+// ── Hearts / HP ─────────────────────────────────────────────────────────
+constexpr int    MAX_HEARTS = 3;
+constexpr int    INVINCIBLE_FRAMES = 63;   // ~1.0 s at 60 FPS
 
 // ─────────────────────────────────────────────────────────────────────────
-// Player (data-core ball)
+// Player (ball image)
 // ─────────────────────────────────────────────────────────────────────────
-class Player : public QGraphicsEllipseItem
+class Player : public QGraphicsPixmapItem
 {
 public:
     double vx = 0.0;
     double vy = 0.0;
 
     explicit Player(QGraphicsItem *parent = nullptr)
-        : QGraphicsEllipseItem(-PLAYER_R, -PLAYER_R,
-                               PLAYER_R * 2, PLAYER_R * 2, parent)
+        : QGraphicsPixmapItem(parent)
     {
-        QRadialGradient grad(0, 0, PLAYER_R);
-        grad.setColorAt(0.0, QColor(120, 220, 255, 255));
-        grad.setColorAt(0.6, QColor(0, 140, 255, 200));
-        grad.setColorAt(1.0, QColor(0, 60, 180, 120));
-        setBrush(QBrush(grad));
-        setPen(QPen(QColor(0, 200, 255, 180), 1.2));
+        const int diameter = static_cast<int>(PLAYER_R * 2);
+        QPixmap pix(QStringLiteral(":/images/ball.png"));
+        if (!pix.isNull()) {
+            pix = pix.scaled(diameter, diameter, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        setPixmap(pix);
+        setOffset(-PLAYER_R, -PLAYER_R);
         setZValue(10);
     }
 
@@ -130,6 +136,7 @@ public:
     {
         buildUi();
         buildMaze();
+        buildHearts();
 
         m_player->resetTo(START_X, START_Y);
         m_scene->addItem(m_player);
@@ -167,6 +174,11 @@ private:
     QLabel         *m_zyroLabel;
     QSlider        *m_sliderX;
     QSlider        *m_sliderY;
+    QList<QGraphicsRectItem*> m_innerWalls;
+    int  m_hearts = MAX_HEARTS;
+    QList<QGraphicsPixmapItem*> m_heartItems;
+    bool m_invincible = false;
+    int  m_invincibleCounter = 0;
 
     // ── UI construction ─────────────────────────────────────────────
     void buildUi()
@@ -324,15 +336,108 @@ private:
         auto *goalLabel = new QGraphicsTextItem(QStringLiteral("GOAL"));
         goalLabel->setDefaultTextColor(QColor(0, 255, 65, 180));
         goalLabel->setFont(QFont("Consolas", 9, QFont::Bold));
-        goalLabel->setPos(GOAL_X + 2, GOAL_Y - 16);
+        goalLabel->setPos(GOAL_X + GOAL_SIZE + 4, GOAL_Y + 6);
         goalLabel->setZValue(2);
         m_scene->addItem(goalLabel);
+
+        // ── Internal laser walls (serpentine maze) ──────────────────
+        auto addLaser = [this](double x, double y, double w, double h) {
+            auto *wall = new QGraphicsRectItem(x, y, w, h);
+            QLinearGradient grad;
+            if (w >= h) {
+                grad = QLinearGradient(x, y, x, y + h);
+            } else {
+                grad = QLinearGradient(x, y, x + w, y);
+            }
+            grad.setColorAt(0.0, QColor(255, 40, 40, 160));
+            grad.setColorAt(0.5, QColor(255, 100, 100, 255));
+            grad.setColorAt(1.0, QColor(255, 40, 40, 160));
+            wall->setBrush(QBrush(grad));
+            wall->setPen(QPen(QColor(255, 80, 80, 180), 0.5));
+            wall->setZValue(5);
+            m_scene->addItem(wall);
+            m_innerWalls.append(wall);
+        };
+
+        // Main horizontal laser walls (serpentine pattern)
+        // Wall 1: y=100, gap on right (x=1050..1194)
+        addLaser(WALL_T, 100, 1044, WALL_T);
+        // Wall 2: y=200, gap on left (x=6..150)
+        addLaser(150, 200, 1044, WALL_T);
+        // Wall 3: y=300, gap on right (x=1050..1194)
+        addLaser(WALL_T, 300, 1044, WALL_T);
+
+        // Small vertical laser obstacles in corridors
+        // Top corridor (y=6..100): weave up/down
+        addLaser(450, WALL_T, WALL_T, 50);        // extends from top
+        addLaser(800, 50, WALL_T, 50);             // extends from bottom
+        // Corridor 1 (y=106..200): weave up/down
+        addLaser(700, 106, WALL_T, 50);            // extends from wall 1
+        addLaser(350, 150, WALL_T, 50);            // extends from wall 2
+        // Corridor 2 (y=206..300): weave up/down
+        addLaser(550, 206, WALL_T, 50);            // extends from wall 2
+        addLaser(900, 250, WALL_T, 50);            // extends from wall 3
+        // Bottom corridor (y=306..394): obstacles near goal
+        addLaser(300, 306, WALL_T, 50);            // extends from wall 3
+        addLaser(600, SCENE_H - WALL_T - 50, WALL_T, 50); // extends from bottom
+        addLaser(850, 306, WALL_T, 50);            // extends from wall 3
+    }
+
+    // ── Hearts ──────────────────────────────────────────────────────
+    void buildHearts()
+    {
+        const double baseX = SCENE_W - 180.0;
+        const double baseY = 10.0;
+        const int heartSize = 50;
+        QPixmap devilPix(QStringLiteral(":/images/devil.png"));
+        if (!devilPix.isNull()) {
+            devilPix = devilPix.scaled(heartSize, heartSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        for (int i = 0; i < MAX_HEARTS; ++i) {
+            auto *heart = new QGraphicsPixmapItem(devilPix);
+            heart->setPos(baseX + i * 58.0, baseY);
+            heart->setZValue(20);
+            m_scene->addItem(heart);
+            m_heartItems.append(heart);
+        }
+    }
+
+    void updateHeartsDisplay()
+    {
+        for (int i = 0; i < m_heartItems.size(); ++i) {
+            m_heartItems[i]->setOpacity(i < m_hearts ? 1.0 : 0.15);
+        }
+    }
+
+    void onWallHit()
+    {
+        if (m_invincible) return;
+
+        m_hearts--;
+        updateHeartsDisplay();
+        m_invincible = true;
+        m_invincibleCounter = 0;
+
+        // Bounce player back
+        m_player->vx = -m_player->vx * 1.5;
+        m_player->vy = -m_player->vy * 1.5;
+
+        if (m_hearts <= 0) {
+            // All hearts lost → full reset
+            m_hearts = MAX_HEARTS;
+            updateHeartsDisplay();
+            m_player->resetTo(START_X, START_Y);
+        }
     }
 
     // ── Start / Stop ────────────────────────────────────────────────
     void startGame()
     {
         m_completed = false;
+        m_hearts = MAX_HEARTS;
+        m_invincible = false;
+        m_invincibleCounter = 0;
+        updateHeartsDisplay();
         m_player->resetTo(START_X, START_Y);
         m_gameTimer->start(TICK_MS);
         startZyroPolling();
@@ -397,16 +502,45 @@ private:
         m_player->vy = qBound(-MAX_SPEED,
                                (m_player->vy + ay) * FRICTION, MAX_SPEED);
 
-        // 2) move
-        double newX = m_player->pos().x() + m_player->vx;
-        double newY = m_player->pos().y() + m_player->vy;
+        // 2) save previous position, then move
+        const double prevX = m_player->pos().x();
+        const double prevY = m_player->pos().y();
+
+        double newX = prevX + m_player->vx;
+        double newY = prevY + m_player->vy;
 
         newX = qBound(WALL_T + PLAYER_R, newX, SCENE_W - WALL_T - PLAYER_R);
         newY = qBound(WALL_T + PLAYER_R, newY, SCENE_H - WALL_T - PLAYER_R);
 
         m_player->setPos(newX, newY);
 
-        // 3) collision — only check Goal
+        // 3) invincibility blink
+        if (m_invincible) {
+            m_invincibleCounter++;
+            m_player->setOpacity((m_invincibleCounter / 4) % 2 ? 0.25 : 1.0);
+            if (m_invincibleCounter >= INVINCIBLE_FRAMES) {
+                m_invincible = false;
+                m_invincibleCounter = 0;
+                m_player->setOpacity(1.0);
+            }
+        }
+
+        // 4) collision — check laser walls (always block, damage only if not invincible)
+        for (auto *wall : m_innerWalls) {
+            if (m_player->collidesWithItem(wall)) {
+                // Always push back to previous position & kill velocity
+                m_player->setPos(prevX, prevY);
+                m_player->vx = 0.0;
+                m_player->vy = 0.0;
+                // Take damage only when not invincible
+                if (!m_invincible) {
+                    onWallHit();
+                }
+                return;
+            }
+        }
+
+        // 5) check Goal
         const auto collisions = m_scene->collidingItems(m_player);
         for (QGraphicsItem *item : collisions) {
             if (dynamic_cast<Goal *>(item)) {
@@ -471,7 +605,7 @@ void MissionPage::setupMission5()
     // Main panel
     auto *mainPanel = new QWidget(page);
     mainPanel->setStyleSheet(QStringLiteral(
-        "background: #111; border: 1px solid #00ff41; border-radius: 8px;"));
+        "background: #111; border: none; border-radius: 8px;"));
     auto *panelLayout = new QVBoxLayout(mainPanel);
     panelLayout->setContentsMargins(10, 8, 10, 8);
     panelLayout->setSpacing(4);
@@ -521,8 +655,10 @@ void MissionPage::showMission5Story()
         << QStringLiteral("<span style='color:#666; %1'>[17:29:14]</span>&nbsp;&nbsp;"
                           "<span style='color:#888; %1'>...</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:15]</span>&nbsp;&nbsp;"
-                          "<span style='color:#eab308; %1'>레이저에 닿으면 시작 지점으로 돌아갑니다.</span>").arg(sf)
+                          "<span style='color:#eab308; %1'>레이저에 닿으면 체력(♥)이 1 감소합니다.</span>").arg(sf)
         << QStringLiteral("<span style='color:#666; %1'>[17:29:16]</span>&nbsp;&nbsp;"
+                          "<span style='color:#eab308; %1'>체력이 모두 소진되면 처음부터 재시작됩니다.</span>").arg(sf)
+        << QStringLiteral("<span style='color:#666; %1'>[17:29:17]</span>&nbsp;&nbsp;"
                           "<span style='color:#eab308; %1'>손이 떨리면 갓찌가 웃습니다.</span>").arg(sf);
 
     showTerminalPopup(
