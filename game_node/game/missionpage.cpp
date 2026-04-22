@@ -67,7 +67,7 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
 
     m_contentLayout = rootLayout;
 
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         qApp->installEventFilter(this);
         m_mission3PopupWatchTimer = new QTimer(this);
         m_mission3PopupWatchTimer->setInterval(150);
@@ -81,7 +81,7 @@ MissionPage::MissionPage(int missionNumber, QWidget *parent)
 
 MissionPage::~MissionPage()
 {
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         qApp->removeEventFilter(this);
     }
     stopMission3CameraPreview();
@@ -89,7 +89,7 @@ MissionPage::~MissionPage()
 
 bool MissionPage::eventFilter(QObject *watched, QEvent *event)
 {
-    if (m_missionNumber == 3 && isVisible() && watched && event) {
+    if (m_missionNumber == 4 && isVisible() && watched && event) {
         QWidget *widget = qobject_cast<QWidget *>(watched);
         if (widget && widget != this && widget != window() && widget->isWindow()) {
             const bool isBlockingDialog = qobject_cast<QDialog *>(widget)
@@ -124,7 +124,7 @@ void MissionPage::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
     syncOperatorModeUi();
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         if (m_mission3PopupWatchTimer && !m_mission3PopupWatchTimer->isActive()) {
             m_mission3PopupWatchTimer->start();
         }
@@ -136,7 +136,7 @@ void MissionPage::showEvent(QShowEvent *event)
 
 void MissionPage::hideEvent(QHideEvent *event)
 {
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         if (m_mission3PopupWatchTimer && m_mission3PopupWatchTimer->isActive()) {
             m_mission3PopupWatchTimer->stop();
         }
@@ -159,7 +159,7 @@ QString MissionPage::buildMission3CapturePath() const
 
 void MissionPage::startMission3CameraPreview()
 {
-    if (m_missionNumber != 3 || m_mission3CameraActive || m_mission3CameraStarting || !m_mission3PreviewArea) {
+    if (m_missionNumber != 4 || m_mission3CameraActive || m_mission3CameraStarting || !m_mission3PreviewArea) {
         return;
     }
 
@@ -229,7 +229,7 @@ void MissionPage::startMission3CameraPreview()
 
 void MissionPage::stopMission3CameraPreview()
 {
-    if (m_missionNumber != 3) {
+    if (m_missionNumber != 4) {
         return;
     }
 
@@ -248,7 +248,7 @@ void MissionPage::stopMission3CameraPreview()
 
 void MissionPage::refreshMission3PreviewPlaceholder()
 {
-    if (m_missionNumber != 3 || !m_mission3PreviewArea) {
+    if (m_missionNumber != 4 || !m_mission3PreviewArea) {
         return;
     }
 
@@ -303,7 +303,7 @@ bool MissionPage::hasBlockingPopupOpen() const
 
 void MissionPage::evaluateMission3CameraPreview()
 {
-    if (m_missionNumber != 3) {
+    if (m_missionNumber != 4) {
         return;
     }
 
@@ -358,7 +358,7 @@ void MissionPage::showTerminalPopup(const QString &title,
                                      const QString &btnColor,
                                      const QColor &glowColor)
 {
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         stopMission3CameraPreview();
         refreshMission3PreviewPlaceholder();
     }
@@ -507,7 +507,7 @@ void MissionPage::showTerminalPopup(const QString &title,
     QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     QApplication::processEvents(QEventLoop::AllEvents, 50);
 
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         m_mission3StoryPopupDismissed = true;
         evaluateMission3CameraPreview();
     }
@@ -518,7 +518,7 @@ void MissionPage::showTerminalPopup(const QString &title,
 // ═══════════════════════════════════════════════════════════════════════════
 void MissionPage::showStoryPopup()
 {
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         m_mission3StoryPopupDismissed = true;
         evaluateMission3CameraPreview();
     }
@@ -531,8 +531,8 @@ void MissionPage::showStoryPopup()
     switch (m_missionNumber) {
     case 1: showMission1Story(); break;
     case 2: showMission2Story(); break;
-    case 3: showMission3Story(); break;
-    case 4: showMission4Story(); break;
+    case 3: showMission4Story(); break;
+    case 4: showMission3Story(); break;
     case 5: showMission5Story(); break;
     default: break;
     }
@@ -551,8 +551,8 @@ void MissionPage::showResultPopup(bool correct)
     switch (m_missionNumber) {
     case 1: showMission1Result(correct); break;
     case 2: showMission2Result(correct); break;
-    case 3: showMission3Result(correct); break;
-    case 4: showMission4Result(correct); break;
+    case 3: showMission4Result(correct); break;
+    case 4: showMission3Result(correct); break;
     case 5: showMission5Result(correct); break;
     default: break;
     }
@@ -569,7 +569,7 @@ void MissionPage::showImagePopup(const QString &imagePath,
     Q_UNUSED(btnText);
     Q_UNUSED(glowColor);
 
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         stopMission3CameraPreview();
         refreshMission3PreviewPlaceholder();
     }
@@ -626,7 +626,7 @@ void MissionPage::showImagePopup(const QString &imagePath,
     overlay->hide();
     overlay->deleteLater();
 
-    if (m_missionNumber == 3) {
+    if (m_missionNumber == 4) {
         QTimer::singleShot(0, this, [this]() {
             evaluateMission3CameraPreview();
         });
@@ -637,7 +637,7 @@ void MissionPage::resetToStory()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
         syncOperatorModeUi();
-        if (m_missionNumber == 3) {
+        if (m_missionNumber == 4) {
             m_mission3StoryPopupDismissed = false;
             m_mission3CapturedImagePath.clear();
             evaluateMission3CameraPreview();
@@ -660,7 +660,7 @@ void MissionPage::startMission()
 {
     if (m_missionNumber >= 1 && m_missionNumber <= 5) {
         syncOperatorModeUi();
-        if (m_missionNumber == 3) {
+        if (m_missionNumber == 4) {
             m_mission3StoryPopupDismissed = false;
             m_mission3CapturedImagePath.clear();
             evaluateMission3CameraPreview();
@@ -686,11 +686,11 @@ void MissionPage::setupMission()
         return;
     }
     if (m_missionNumber == 3) {
-        setupMission3();
+        setupMission4();
         return;
     }
     if (m_missionNumber == 4) {
-        setupMission4();
+        setupMission3();
         return;
     }
     if (m_missionNumber == 5) {

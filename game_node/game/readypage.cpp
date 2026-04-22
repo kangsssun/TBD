@@ -891,6 +891,13 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
     QWidget *topLevel = window();
     const QSize screenSize = topLevel->size();
 
+    // 전체 화면 검은 배경 (엔딩 동안 게임 화면이 비치지 않도록)
+    auto *blackBg = new QWidget(topLevel);
+    blackBg->setStyleSheet(QStringLiteral("background-color: #000000;"));
+    blackBg->setGeometry(0, 0, screenSize.width(), screenSize.height());
+    blackBg->show();
+    blackBg->raise();
+
     // ═══ 1단계: 부팅 로그 화면 (갓찌 등장으로 중단) ═══
     {
         auto *dlg = new QDialog(topLevel);
@@ -968,7 +975,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
             dlg->setAttribute(Qt::WA_DeleteOnClose);
             dlg->setFixedSize(500, 220);
-            dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #ff2222;"));
+            dlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #ff2222;"));
 
             auto *eLayout = new QVBoxLayout(dlg);
             eLayout->setContentsMargins(24, 20, 24, 16);
@@ -1023,7 +1030,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             failDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
             failDlg->setAttribute(Qt::WA_DeleteOnClose);
             failDlg->setFixedSize(520, 380);
-            failDlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #ff2222;"));
+            failDlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #ff2222;"));
 
             auto *fLayout = new QVBoxLayout(failDlg);
             fLayout->setContentsMargins(24, 20, 24, 16);
@@ -1059,7 +1066,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             btnRetry->setCursor(Qt::PointingHandCursor);
             btnRetry->setFocusPolicy(Qt::NoFocus);
             btnRetry->setStyleSheet(QStringLiteral(
-                "QPushButton { background: #1a0000; color: #ff4444; border: 2px solid #ff4444; "
+                "QPushButton { background: #000000; color: #ff4444; border: 2px solid #ff4444; "
                 "border-radius: 6px; font-size: 15px; font-weight: bold; font-family: Consolas; }"
                 "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
             fBtnRow->addWidget(btnRetry);
@@ -1097,7 +1104,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
             auto *outerFrame = new QFrame(dlg);
             outerFrame->setStyleSheet(QStringLiteral(
-                "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+                "background-color: #000000; border: 3px solid #ff2222; border-radius: 8px;"));
             auto *outerGlow = new QGraphicsDropShadowEffect(outerFrame);
             outerGlow->setBlurRadius(40);
             outerGlow->setColor(QColor(255, 34, 34, 160));
@@ -1118,7 +1125,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
             auto *innerFrame = new QFrame(outerFrame);
             innerFrame->setStyleSheet(QStringLiteral(
-                "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+                "background-color: #000000; border: 1px solid #ff4444; border-radius: 4px;"));
             auto *innerLayout = new QVBoxLayout(innerFrame);
             innerLayout->setContentsMargins(16, 14, 16, 14);
             innerLayout->setSpacing(10);
@@ -1163,7 +1170,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 btn->setCursor(Qt::PointingHandCursor);
                 btn->setFocusPolicy(Qt::NoFocus);
                 btn->setStyleSheet(QStringLiteral(
-                    "QPushButton { background: #1a0000; color: #ffffff; border: 2px solid #ff4444; "
+                    "QPushButton { background: #000000; color: #ffffff; border: 2px solid #ff4444; "
                     "border-radius: 6px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
                     "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"
                     "QPushButton:pressed { background: #cc0000; }"));
@@ -1213,7 +1220,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
             auto *outerFrame = new QFrame(dlg);
             outerFrame->setStyleSheet(QStringLiteral(
-                "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+                "background-color: #000000; border: 3px solid #ff2222; border-radius: 8px;"));
             auto *outerGlow = new QGraphicsDropShadowEffect(outerFrame);
             outerGlow->setBlurRadius(40);
             outerGlow->setColor(QColor(255, 34, 34, 160));
@@ -1234,7 +1241,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
             auto *innerFrame = new QFrame(outerFrame);
             innerFrame->setStyleSheet(QStringLiteral(
-                "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+                "background-color: #000000; border: 1px solid #ff4444; border-radius: 4px;"));
             auto *innerLayout = new QVBoxLayout(innerFrame);
             innerLayout->setContentsMargins(16, 14, 16, 14);
             innerLayout->setSpacing(10);
@@ -1279,7 +1286,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 btn->setCursor(Qt::PointingHandCursor);
                 btn->setFocusPolicy(Qt::NoFocus);
                 btn->setStyleSheet(QStringLiteral(
-                    "QPushButton { background: #1a0000; color: #ffffff; border: 2px solid #ff4444; "
+                    "QPushButton { background: #000000; color: #ffffff; border: 2px solid #ff4444; "
                     "border-radius: 6px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
                     "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"
                     "QPushButton:pressed { background: #cc0000; }"));
@@ -1322,7 +1329,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
             dlg->setAttribute(Qt::WA_DeleteOnClose);
             dlg->setFixedSize(520, 440);
-            dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #00ff41;"));
+            dlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #00ff41;"));
 
             auto *sLayout = new QVBoxLayout(dlg);
             sLayout->setContentsMargins(24, 20, 24, 16);
@@ -1361,7 +1368,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             btnOk->setCursor(Qt::PointingHandCursor);
             btnOk->setFocusPolicy(Qt::NoFocus);
             btnOk->setStyleSheet(QStringLiteral(
-                "QPushButton { background: #0a2e0a; color: #00ff41; border: 2px solid #00ff41; "
+                "QPushButton { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
                 "border-radius: 6px; font-size: 16px; font-weight: bold; font-family: Consolas; }"
                 "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
             sBtnRow->addWidget(btnOk);
@@ -1405,7 +1412,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         dlg->setFixedSize(screenSize);
         dlg->move(0, 0);
         dlg->setStyleSheet(QStringLiteral(
-            "background: qlineargradient(y1:0, y2:1, stop:0 #1a0000, stop:1 #330000);"));
+            "background: #000000;"));
 
         auto *outer = new QVBoxLayout(dlg);
         outer->setContentsMargins(0, 0, 0, 0);
@@ -1529,7 +1536,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         contentWidget->setFixedSize(screenSize);
         contentWidget->move(0, 0);
         contentWidget->setStyleSheet(QStringLiteral(
-            "background: qlineargradient(y1:0, y2:1, stop:0 #0a0e1a, stop:1 #0d1b2a);"));
+            "background: #000000;"));
 
         auto *vbox = new QVBoxLayout(contentWidget);
         vbox->setContentsMargins(32, 24, 32, 24);
@@ -1638,7 +1645,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         confirmBtn->setCursor(Qt::PointingHandCursor);
         confirmBtn->setFocusPolicy(Qt::NoFocus);
         confirmBtn->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #0d1b2a; color: #00ff41; border: 2px solid #00ff41; "
+            "QPushButton { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
             "border-radius: 8px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
         auto *btnGlow = new QGraphicsDropShadowEffect(confirmBtn);
@@ -1690,7 +1697,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         dlg->setFixedSize(340, 440);
         dlg->move((screenSize.width() - 340) / 2, (screenSize.height() - 440) / 2);
         dlg->setStyleSheet(QStringLiteral(
-            "background: qlineargradient(y1:0, y2:1, stop:0 #0a0e1a, stop:1 #0d1b2a); "
+            "background: #000000; "
             "border: 2px solid #00ff41; border-radius: 12px;"));
 
         auto *vbox = new QVBoxLayout(dlg);
@@ -1730,7 +1737,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         inputLine->setReadOnly(true);
         inputLine->setFocusPolicy(Qt::NoFocus);
         inputLine->setStyleSheet(QStringLiteral(
-            "QLineEdit { background: #0d1b2a; color: #00ff41; border: 2px solid #00ff41; "
+            "QLineEdit { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
             "border-radius: 6px; font-size: 28px; font-weight: bold; "
             "font-family: 'Consolas', monospace; padding: 6px; }"));
         inputLine->setFixedWidth(280);
@@ -1753,12 +1760,12 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         // ── 숫자 키패드 ──
         const QString keyBtnStyle = QStringLiteral(
-            "QPushButton { background: #0d1b2a; color: #00ff41; border: 1px solid #00ff41; "
+            "QPushButton { background: #000000; color: #00ff41; border: 1px solid #00ff41; "
             "border-radius: 6px; font-size: 22px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"
             "QPushButton:pressed { background: #00cc33; color: #0c0c0c; }");
         const QString delBtnStyle = QStringLiteral(
-            "QPushButton { background: #0d1b2a; color: #ff4444; border: 1px solid #ff4444; "
+            "QPushButton { background: #000000; color: #ff4444; border: 1px solid #ff4444; "
             "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #ff4444; color: #0c0c0c; }");
 
@@ -1815,7 +1822,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         submitBtn->setCursor(Qt::PointingHandCursor);
         submitBtn->setFocusPolicy(Qt::NoFocus);
         submitBtn->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #0d1b2a; color: #00ff41; border: 2px solid #00ff41; "
+            "QPushButton { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
             "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
         auto *submitGlow = new QGraphicsDropShadowEffect(submitBtn);
@@ -1860,13 +1867,128 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
     } // end while (!keypadAccepted)
 
+    // ═══ 4-B단계: 엔딩 이미지 시퀀스 (ending/1.jpg ~ 8.jpg) ═══
+    // 1번: 하단 1/4 터치 시 다음, 2~6번: 1초 자동, 7번: 퇴실 버튼, 8번: 확인 버튼
+    {
+        const QString endingDir = QStringLiteral("/mnt/nfs/ending/");
+
+        auto *dlg = new QDialog(topLevel);
+        dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+        dlg->setAttribute(Qt::WA_DeleteOnClose, false);
+        dlg->setFixedSize(screenSize);
+        dlg->move(0, 0);
+        dlg->setStyleSheet(QStringLiteral("background-color: #000000;"));
+
+        auto *imageLabel = new QLabel(dlg);
+        imageLabel->setFixedSize(screenSize);
+        imageLabel->move(0, 0);
+        imageLabel->setAlignment(Qt::AlignCenter);
+        imageLabel->setStyleSheet(QStringLiteral("background-color: #000000; border: none;"));
+        imageLabel->setScaledContents(false);
+
+        // 투명 버튼 (하단 1/4 터치, 퇴실 버튼, 확인 버튼 등에 재사용)
+        auto *overlayBtn = new QPushButton(dlg);
+        overlayBtn->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+        overlayBtn->setCursor(Qt::PointingHandCursor);
+        overlayBtn->setFocusPolicy(Qt::NoFocus);
+        overlayBtn->hide();
+
+        auto *autoTimer = new QTimer(dlg);
+        autoTimer->setSingleShot(true);
+
+        auto imgIdx = std::make_shared<int>(0);
+
+        // 이미지 로드 함수
+        auto loadImage = [imageLabel, endingDir, screenSize](int idx) -> bool {
+            QString path = endingDir + QString::number(idx) + QStringLiteral(".jpg");
+            QPixmap pix(path);
+            if (pix.isNull()) {
+                qDebug() << "[ENDING] Image not found:" << path;
+                return false;
+            }
+            imageLabel->setPixmap(pix.scaled(screenSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            return true;
+        };
+
+        // 각 이미지 상태별 설정 함수
+        auto setupFn = std::make_shared<std::function<void()>>();
+        *setupFn = [dlg, overlayBtn, autoTimer, imgIdx, loadImage, screenSize, setupFn]() {
+            int idx = *imgIdx;
+            overlayBtn->hide();
+            overlayBtn->disconnect();
+            autoTimer->stop();
+            autoTimer->disconnect();
+
+            if (!loadImage(idx)) {
+                dlg->accept();
+                return;
+            }
+
+            if (idx == 1) {
+                // 1번 이미지: 하단 1/4 영역 터치 시 다음
+                int btnH = screenSize.height() / 4;
+                overlayBtn->setGeometry(0, screenSize.height() - btnH, screenSize.width(), btnH);
+                overlayBtn->show();
+                overlayBtn->raise();
+                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [imgIdx, setupFn]() {
+                    *imgIdx = 2;
+                    (*setupFn)();
+                });
+            }
+            else if (idx >= 2 && idx <= 6) {
+                // 2~6번: 1초 후 자동으로 다음
+                QObject::connect(autoTimer, &QTimer::timeout, dlg, [imgIdx, setupFn]() {
+                    (*imgIdx)++;
+                    (*setupFn)();
+                });
+                autoTimer->start(1000);
+            }
+            else if (idx == 7) {
+                // 7번: 하단 "퇴실" 파란 버튼 위에 투명 버튼 오버레이
+                int btnW = screenSize.width() * 50 / 100;
+                int btnH = screenSize.height() * 10 / 100;
+                int btnX = (screenSize.width() - btnW) / 2;
+                int btnY = screenSize.height() * 87 / 100;
+                overlayBtn->setGeometry(btnX, btnY, btnW, btnH);
+                overlayBtn->show();
+                overlayBtn->raise();
+                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [imgIdx, setupFn]() {
+                    *imgIdx = 8;
+                    (*setupFn)();
+                });
+            }
+            else if (idx == 8) {
+                // 8번: 우측 "확인" 버튼 위에 투명 버튼 오버레이
+                int btnW = screenSize.width() * 30 / 100;
+                int btnH = screenSize.height() * 10 / 100;
+                int btnX = screenSize.width() * 60 / 100;
+                int btnY = screenSize.height() * 55 / 100;
+                overlayBtn->setGeometry(btnX, btnY, btnW, btnH);
+                overlayBtn->show();
+                overlayBtn->raise();
+                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [dlg]() {
+                    dlg->accept();
+                });
+            }
+            else {
+                dlg->accept();
+            }
+        };
+
+        *imgIdx = 1;
+        (*setupFn)();
+
+        dlg->exec();
+        dlg->deleteLater();
+    }
+
     // ═══ 5단계: 퇴실 처리 팝업 ═══
     {
         auto *dlg = new QDialog(topLevel);
         dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         dlg->setFixedSize(420, 180);
-        dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #00ff41;"));
+        dlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #00ff41;"));
 
         auto *layout = new QVBoxLayout(dlg);
         layout->setContentsMargins(24, 20, 24, 16);
@@ -1922,7 +2044,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         auto *frame = new QFrame(dlg);
         frame->setStyleSheet(QStringLiteral(
-            "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+            "background-color: #000000; border: 3px solid #ff2222; border-radius: 8px;"));
         auto *glow = new QGraphicsDropShadowEffect(frame);
         glow->setBlurRadius(40);
         glow->setColor(QColor(255, 34, 34, 160));
@@ -1942,7 +2064,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         auto *innerFrame = new QFrame(frame);
         innerFrame->setStyleSheet(QStringLiteral(
-            "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+            "background-color: #000000; border: 1px solid #ff4444; border-radius: 4px;"));
         auto *innerLayout = new QVBoxLayout(innerFrame);
         innerLayout->setContentsMargins(20, 16, 20, 16);
         innerLayout->setSpacing(8);
@@ -1982,7 +2104,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         btnOk->setCursor(Qt::PointingHandCursor);
         btnOk->setFocusPolicy(Qt::NoFocus);
         btnOk->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #1a0000; color: #ff4444; border: 2px solid #ff4444; "
+            "QPushButton { background: #000000; color: #ff4444; border: 2px solid #ff4444; "
             "border-radius: 6px; font-size: 16px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
         btnRow->addWidget(btnOk);
@@ -2027,7 +2149,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         auto *frame = new QFrame(dlg);
         frame->setStyleSheet(QStringLiteral(
-            "background-color: #0d0000; border: 2px solid #ff2222; border-radius: 8px;"));
+            "background-color: #000000; border: 2px solid #ff2222; border-radius: 8px;"));
         auto *frameLayout = new QVBoxLayout(frame);
         frameLayout->setContentsMargins(20, 20, 20, 20);
         frameLayout->setSpacing(12);
@@ -2070,7 +2192,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         btnOk->setCursor(Qt::PointingHandCursor);
         btnOk->setFocusPolicy(Qt::NoFocus);
         btnOk->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #1a0000; color: #ff4444; border: 2px solid #ff4444; "
+            "QPushButton { background: #000000; color: #ff4444; border: 2px solid #ff4444; "
             "border-radius: 6px; font-size: 16px; font-weight: 900; font-family: Consolas; }"
             "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
         btnRow->addWidget(btnOk);
@@ -2097,7 +2219,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         dlg->setFixedSize(420, 200);
-        dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #00ff41;"));
+        dlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #00ff41;"));
 
         auto *layout = new QVBoxLayout(dlg);
         layout->setContentsMargins(24, 24, 24, 16);
@@ -2213,4 +2335,8 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
     }
 
     qDebug() << "[ENDING] Ending sequence completed";
+
+    // 검은 배경 오버레이 제거
+    blackBg->hide();
+    blackBg->deleteLater();
 }

@@ -247,7 +247,7 @@ void MissionPage::setupMission4()
     pageLayout->setContentsMargins(10, 4, 10, 4);
     pageLayout->setSpacing(6);
 
-    auto *header = new QLabel(QStringLiteral("[MISSION 4] - 서버 온도 안정화"), page);
+    auto *header = new QLabel(QStringLiteral("[MISSION 3] - 서버 온도 안정화"), page);
     header->setAlignment(Qt::AlignCenter);
     header->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "

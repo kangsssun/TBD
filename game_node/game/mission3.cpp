@@ -30,7 +30,7 @@ void MissionPage::setupMission3()
     problemLayout->setContentsMargins(12, 6, 12, 6);
     problemLayout->setSpacing(6);
 
-    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 3] - 뒤섞인 인증 코드 스캔"), problemPage);
+    auto *problemHeader = new QLabel(QStringLiteral("[MISSION 4] - 뒤섞인 인증 코드 스캔"), problemPage);
     problemHeader->setAlignment(Qt::AlignCenter);
     problemHeader->setStyleSheet(QStringLiteral(
         "color: #00ff41; font-size: 22px; font-weight: 800; "
