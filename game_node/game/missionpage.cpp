@@ -311,13 +311,13 @@ void MissionPage::evaluateMission3CameraPreview()
 
     if (m_mission3CaptureStatus) {
         if (!m_mission3StoryPopupDismissed) {
-            m_mission3CaptureStatus->setText(QStringLiteral("스토리 팝업 종료 후 LIVE 시작"));
+            m_mission3CaptureStatus->clear();
         } else if (popupOpen) {
-            m_mission3CaptureStatus->setText(QStringLiteral("팝업 표시 중 - LIVE 일시중단"));
+            m_mission3CaptureStatus->clear();
         } else if (m_mission3CameraActive) {
             m_mission3CaptureStatus->clear();
         } else {
-            m_mission3CaptureStatus->setText(QStringLiteral("LIVE 준비 중..."));
+            m_mission3CaptureStatus->clear();
         }
     }
 
@@ -516,6 +516,10 @@ void MissionPage::showStoryPopup()
 
     // 운영자 모드: 스토리 팝업 스킵
     if (s_operatorMode) {
+        // Mission 2: start gauge timer immediately when skipping story
+        if (m_missionNumber == 2 && m_wheelTimer && !m_wheelTimer->isActive()) {
+            m_wheelTimer->start();
+        }
         return;
     }
 

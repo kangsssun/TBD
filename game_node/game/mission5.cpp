@@ -14,6 +14,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsRectItem>
+#include <QGraphicsPolygonItem>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsTextItem>
 #include <QResizeEvent>
@@ -22,6 +23,7 @@
 #include <QBrush>
 #include <QPen>
 #include <QPixmap>
+#include <QPolygonF>
 #include <QRadialGradient>
 #include <QLinearGradient>
 #include <QFont>
@@ -41,15 +43,15 @@ namespace {
 
 // ── Scene dimensions ────────────────────────────────────────────────────
 constexpr double SCENE_W  = 1200.0;
-constexpr double SCENE_H  = 400.0;
+constexpr double SCENE_H  = 500.0;
 constexpr double WALL_T   = 6.0;      // wall / laser thickness
 constexpr double PLAYER_R = 12.0;     // player radius
 constexpr double GOAL_SIZE = 30.0;
 
 // ── Physics constants ───────────────────────────────────────────────────
-constexpr double ACCEL_SCALE  = 0.003;
-constexpr double FRICTION     = 0.85;
-constexpr double MAX_SPEED    = 1.8;
+constexpr double ACCEL_SCALE  = 0.004;
+constexpr double FRICTION     = 0.87;
+constexpr double MAX_SPEED    = 2.2;
 constexpr int    TICK_MS      = 16;    // ~60 FPS
 
 // ── Start / Goal positions ──────────────────────────────────────────────
@@ -174,11 +176,31 @@ private:
     QLabel         *m_zyroLabel;
     QSlider        *m_sliderX;
     QSlider        *m_sliderY;
-    QList<QGraphicsRectItem*> m_innerWalls;
+    QList<QGraphicsItem*> m_innerWalls;
     int  m_hearts = MAX_HEARTS;
     QList<QGraphicsPixmapItem*> m_heartItems;
     bool m_invincible = false;
     int  m_invincibleCounter = 0;
+    int  m_stunCounter = 0;
+
+    // Moving obstacles
+    struct MovingObs {
+        QGraphicsEllipseItem *item;
+        double minY, maxY;
+        double speed;
+        bool movingDown;
+    };
+    QList<MovingObs> m_movingObs;
+
+    // Rotating obstacles (at turning points)
+    struct RotatingObs {
+        QGraphicsEllipseItem *item;
+        double cx, cy;       // orbit center
+        double orbitR;       // orbit radius
+        double angle;        // current angle (radians)
+        double angularSpeed; // radians per frame
+    };
+    QList<RotatingObs> m_rotatingObs;
 
     // ── UI construction ─────────────────────────────────────────────
     void buildUi()
@@ -193,25 +215,12 @@ private:
         m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         m_view->setStyleSheet(QStringLiteral(
-            "QGraphicsView { background: #05070b; border: 1px solid #1a3a1a; "
-            "border-radius: 4px; }"));
+            "QGraphicsView { background: #05070b; border: none; }"));
         m_view->setFrameShape(QFrame::NoFrame);
         m_view->setAlignment(Qt::AlignCenter);
         m_scene->setBackgroundBrush(QColor("#05070b"));
 
         root->addWidget(m_view, 1);
-
-        // status bar
-        auto *statusRow = new QHBoxLayout();
-        statusRow->setContentsMargins(4, 0, 4, 0);
-
-        m_zyroLabel = new QLabel(QStringLiteral("ZYRO: X=0  Y=0"), this);
-        m_zyroLabel->setAlignment(Qt::AlignRight);
-        m_zyroLabel->setStyleSheet(QStringLiteral(
-            "color: #7dd3fc; font-size: 12px; font-weight: 600; "
-            "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-        statusRow->addWidget(m_zyroLabel);
-        root->addLayout(statusRow);
 
         // ── Slider mock (PC testing) ────────────────────────────────
 #ifndef Q_OS_LINUX
@@ -249,15 +258,9 @@ private:
 
         QObject::connect(m_sliderX, &QSlider::valueChanged, this, [this](int v) {
             m_pitchInput = static_cast<double>(v);
-            m_zyroLabel->setText(QStringLiteral("ZYRO: X=%1  Y=%2")
-                .arg(static_cast<int>(m_pitchInput))
-                .arg(static_cast<int>(m_rollInput)));
         });
         QObject::connect(m_sliderY, &QSlider::valueChanged, this, [this](int v) {
             m_rollInput = static_cast<double>(v);
-            m_zyroLabel->setText(QStringLiteral("ZYRO: X=%1  Y=%2")
-                .arg(static_cast<int>(m_pitchInput))
-                .arg(static_cast<int>(m_rollInput)));
         });
 #endif
 
@@ -341,46 +344,121 @@ private:
         m_scene->addItem(goalLabel);
 
         // ── Internal laser walls (serpentine maze) ──────────────────
-        auto addLaser = [this](double x, double y, double w, double h) {
-            auto *wall = new QGraphicsRectItem(x, y, w, h);
-            QLinearGradient grad;
-            if (w >= h) {
-                grad = QLinearGradient(x, y, x, y + h);
+        auto addLaser = [this](double x, double y, double w, double h, bool flip = false) {
+            const bool horizontal = (w >= h);
+
+            if (horizontal) {
+                // Horizontal: straight rectangle
+                auto *rect = new QGraphicsRectItem(x, y, w, h);
+                QLinearGradient grad(x, y, x, y + h);
+                grad.setColorAt(0.0, QColor(255, 40, 40, 160));
+                grad.setColorAt(0.5, QColor(255, 100, 100, 255));
+                grad.setColorAt(1.0, QColor(255, 40, 40, 160));
+                rect->setBrush(QBrush(grad));
+                rect->setPen(QPen(QColor(255, 80, 80, 180), 0.5));
+                rect->setZValue(5);
+                m_scene->addItem(rect);
+                m_innerWalls.append(rect);
             } else {
-                grad = QLinearGradient(x, y, x + w, y);
+                // Vertical: triangle spike
+                const double cx = x + w * 0.5;
+                const double baseW = 24.0;
+                QPolygonF poly;
+                if (!flip) {
+                    // Normal: base at top, tip at bottom ▽
+                    poly << QPointF(cx - baseW, y)
+                         << QPointF(cx + baseW, y)
+                         << QPointF(cx, y + h);
+                } else {
+                    // Flipped: tip at top, base at bottom △
+                    poly << QPointF(cx, y)
+                         << QPointF(cx + baseW, y + h)
+                         << QPointF(cx - baseW, y + h);
+                }
+                auto *item = new QGraphicsPolygonItem(poly);
+                QLinearGradient grad(cx, y, cx, y + h);
+                grad.setColorAt(0.0, QColor(255, 80, 80, 200));
+                grad.setColorAt(0.5, QColor(255, 120, 120, 255));
+                grad.setColorAt(1.0, QColor(200, 20, 20, 180));
+                item->setBrush(QBrush(grad));
+                item->setPen(QPen(QColor(255, 80, 80, 200), 0.5));
+                item->setZValue(5);
+                m_scene->addItem(item);
+                m_innerWalls.append(item);
             }
-            grad.setColorAt(0.0, QColor(255, 40, 40, 160));
-            grad.setColorAt(0.5, QColor(255, 100, 100, 255));
-            grad.setColorAt(1.0, QColor(255, 40, 40, 160));
-            wall->setBrush(QBrush(grad));
-            wall->setPen(QPen(QColor(255, 80, 80, 180), 0.5));
-            wall->setZValue(5);
-            m_scene->addItem(wall);
-            m_innerWalls.append(wall);
         };
 
         // Main horizontal laser walls (serpentine pattern)
-        // Wall 1: y=100, gap on right (x=1050..1194)
-        addLaser(WALL_T, 100, 1044, WALL_T);
-        // Wall 2: y=200, gap on left (x=6..150)
-        addLaser(150, 200, 1044, WALL_T);
-        // Wall 3: y=300, gap on right (x=1050..1194)
-        addLaser(WALL_T, 300, 1044, WALL_T);
+        // Wall 1: y=125, gap on right
+        addLaser(WALL_T, 125, 1044, WALL_T);
+        // Wall 2: y=250, gap on left
+        addLaser(150, 250, 1044, WALL_T);
+        // Wall 3: y=375, gap on right
+        addLaser(WALL_T, 375, 1044, WALL_T);
 
         // Small vertical laser obstacles in corridors
-        // Top corridor (y=6..100): weave up/down
-        addLaser(450, WALL_T, WALL_T, 50);        // extends from top
-        addLaser(800, 50, WALL_T, 50);             // extends from bottom
-        // Corridor 1 (y=106..200): weave up/down
-        addLaser(700, 106, WALL_T, 50);            // extends from wall 1
-        addLaser(350, 150, WALL_T, 50);            // extends from wall 2
-        // Corridor 2 (y=206..300): weave up/down
-        addLaser(550, 206, WALL_T, 50);            // extends from wall 2
-        addLaser(900, 250, WALL_T, 50);            // extends from wall 3
-        // Bottom corridor (y=306..394): obstacles near goal
-        addLaser(300, 306, WALL_T, 50);            // extends from wall 3
-        addLaser(600, SCENE_H - WALL_T - 50, WALL_T, 50); // extends from bottom
-        addLaser(850, 306, WALL_T, 50);            // extends from wall 3
+        // Top corridor (y=6..125)
+        addLaser(380, WALL_T, WALL_T, 60);              // #1 normal ▽
+        addLaser(750, 65, WALL_T, 60, true);             // #2 flipped △
+        // Corridor 1 (y=131..250)
+        addLaser(500, 131, WALL_T, 60);                  // #3 normal ▽
+        addLaser(250, 190, WALL_T, 60, true);            // #4 flipped △
+        // Corridor 2 (y=256..375)
+        addLaser(650, 256, WALL_T, 60);                  // #5 normal ▽
+        addLaser(950, 315, WALL_T, 60, true);            // #6 flipped △
+        // Bottom corridor (y=381..494)
+        addLaser(200, 381, WALL_T, 60);                  // #7 normal ▽
+        addLaser(520, SCENE_H - WALL_T - 60, WALL_T, 60, true); // #8 flipped △
+        addLaser(880, 381, WALL_T, 60);                  // #9 normal ▽
+
+        // ── Moving obstacles (in gaps between spikes) ───────────
+        auto addMovingObs = [this](double x, double corridorTop, double corridorBot, double speed) {
+            const double r = 10.0;
+            auto *obs = new QGraphicsEllipseItem(-r, -r, r * 2, r * 2);
+            QRadialGradient grad(0, 0, r);
+            grad.setColorAt(0.0, QColor(255, 180, 0, 255));
+            grad.setColorAt(0.7, QColor(255, 120, 0, 200));
+            grad.setColorAt(1.0, QColor(200, 60, 0, 140));
+            obs->setBrush(QBrush(grad));
+            obs->setPen(QPen(QColor(255, 160, 0, 200), 1));
+            obs->setZValue(8);
+            const double startY = (corridorTop + corridorBot) / 2.0;
+            obs->setPos(x, startY);
+            m_scene->addItem(obs);
+            m_movingObs.append({obs, corridorTop + r + 2, corridorBot - r - 2, speed, true});
+        };
+
+        // Top corridor: spike-free zone around x=580
+        addMovingObs(580, WALL_T, 125, 0.8);
+        // Corridor 1: spike-free zone around x=850
+        addMovingObs(850, 131, 250, 1.0);
+        // Corridor 2: spike-free zone around x=350
+        addMovingObs(350, 256, 375, 0.9);
+        // Bottom corridor: spike-free zone around x=700
+        addMovingObs(700, 381, SCENE_H - WALL_T, 1.1);
+
+        // ── Rotating obstacles at turning points ────────────
+        auto addRotatingObs = [this](double cx, double cy, double orbitR, double angularSpeed) {
+            const double r = 10.0;
+            auto *obs = new QGraphicsEllipseItem(-r, -r, r * 2, r * 2);
+            QRadialGradient grad(0, 0, r);
+            grad.setColorAt(0.0, QColor(255, 60, 200, 255));
+            grad.setColorAt(0.7, QColor(200, 30, 160, 200));
+            grad.setColorAt(1.0, QColor(140, 10, 100, 140));
+            obs->setBrush(QBrush(grad));
+            obs->setPen(QPen(QColor(255, 80, 200, 200), 1));
+            obs->setZValue(8);
+            obs->setPos(cx + orbitR, cy);  // start at angle=0
+            m_scene->addItem(obs);
+            m_rotatingObs.append({obs, cx, cy, orbitR, 0.0, angularSpeed});
+        };
+
+        // Turn 1: right gap (wall1 ends at x=1050, corridor y=125..250)
+        addRotatingObs(1120, 187.5, 40.0, 0.03);
+        // Turn 2: left gap (wall2 starts at x=150, corridor y=250..375)
+        addRotatingObs(78, 312.5, 40.0, -0.035);
+        // Turn 3: right gap (wall3 ends at x=1050, corridor y=375..494)
+        addRotatingObs(1120, 437.0, 40.0, 0.04);
     }
 
     // ── Hearts ──────────────────────────────────────────────────────
@@ -447,13 +525,9 @@ private:
     {
 #ifdef Q_OS_LINUX
         if (board_sync() != 0) {
-            if (m_zyroLabel)
-                m_zyroLabel->setText(QStringLiteral("ZYRO: SYNC FAILED"));
             return;
         }
         if (init_event_thread() != 0) {
-            if (m_zyroLabel)
-                m_zyroLabel->setText(QStringLiteral("ZYRO: THREAD FAILED"));
             return;
         }
         m_zyroReady = true;
@@ -464,9 +538,6 @@ private:
             if (zyro_get_value(&x, &y) == 0) {
                 m_pitchInput = static_cast<double>(x);
                 m_rollInput  = static_cast<double>(y);
-                if (m_zyroLabel)
-                    m_zyroLabel->setText(
-                        QStringLiteral("ZYRO: X=%1  Y=%2").arg(x).arg(y));
             }
         });
         m_zyroTimer->start();
@@ -492,6 +563,38 @@ private:
     void updateGame()
     {
         if (m_completed) return;
+
+        // Stun: skip movement while stunned
+        if (m_stunCounter > 0) {
+            m_stunCounter--;
+            if (m_invincible) {
+                m_invincibleCounter++;
+                m_player->setOpacity((m_invincibleCounter / 4) % 2 ? 0.25 : 1.0);
+                if (m_invincibleCounter >= INVINCIBLE_FRAMES) {
+                    m_invincible = false;
+                    m_invincibleCounter = 0;
+                    m_player->setOpacity(1.0);
+                }
+            }
+            return;
+        }
+
+        // Move obstacles
+        for (auto &obs : m_movingObs) {
+            double y = obs.item->pos().y();
+            y += obs.movingDown ? obs.speed : -obs.speed;
+            if (y >= obs.maxY) { y = obs.maxY; obs.movingDown = false; }
+            if (y <= obs.minY) { y = obs.minY; obs.movingDown = true; }
+            obs.item->setPos(obs.item->pos().x(), y);
+        }
+
+        // Rotate obstacles
+        for (auto &rot : m_rotatingObs) {
+            rot.angle += rot.angularSpeed;
+            const double nx = rot.cx + std::cos(rot.angle) * rot.orbitR;
+            const double ny = rot.cy + std::sin(rot.angle) * rot.orbitR;
+            rot.item->setPos(nx, ny);
+        }
 
         // 1) gyro input → acceleration → velocity (inverted)
         const double ax = -m_rollInput  * ACCEL_SCALE;
@@ -525,13 +628,25 @@ private:
             }
         }
 
-        // 4) collision — check laser walls (always block, damage only if not invincible)
+        // 4) collision — check laser walls (push back + damage if not invincible)
         for (auto *wall : m_innerWalls) {
             if (m_player->collidesWithItem(wall)) {
-                // Always push back to previous position & kill velocity
-                m_player->setPos(prevX, prevY);
+                // Push back in the opposite direction of movement
+                double dx = prevX - newX;
+                double dy = prevY - newY;
+                const double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist > 0.01) { dx /= dist; dy /= dist; }
+                else { dx = 0.0; dy = -1.0; }
+                const double pushBack = 20.0;
+                double safeX = prevX + dx * pushBack;
+                double safeY = prevY + dy * pushBack;
+                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
+                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
+                m_player->setPos(safeX, safeY);
+
                 m_player->vx = 0.0;
                 m_player->vy = 0.0;
+                m_stunCounter = 60;  // ~1s freeze at 60fps
                 // Take damage only when not invincible
                 if (!m_invincible) {
                     onWallHit();
@@ -540,7 +655,55 @@ private:
             }
         }
 
-        // 5) check Goal
+        // 5) check moving obstacles
+        for (const auto &obs : m_movingObs) {
+            if (m_player->collidesWithItem(obs.item)) {
+                double dx = prevX - newX;
+                double dy = prevY - newY;
+                const double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist > 0.01) { dx /= dist; dy /= dist; }
+                else { dx = 0.0; dy = -1.0; }
+                const double pushBack = 20.0;
+                double safeX = prevX + dx * pushBack;
+                double safeY = prevY + dy * pushBack;
+                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
+                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
+                m_player->setPos(safeX, safeY);
+                m_player->vx = 0.0;
+                m_player->vy = 0.0;
+                m_stunCounter = 60;
+                if (!m_invincible) {
+                    onWallHit();
+                }
+                return;
+            }
+        }
+
+        // 6) check rotating obstacles
+        for (const auto &rot : m_rotatingObs) {
+            if (m_player->collidesWithItem(rot.item)) {
+                double dx = prevX - newX;
+                double dy = prevY - newY;
+                const double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist > 0.01) { dx /= dist; dy /= dist; }
+                else { dx = 0.0; dy = -1.0; }
+                const double pushBack = 20.0;
+                double safeX = prevX + dx * pushBack;
+                double safeY = prevY + dy * pushBack;
+                safeX = qBound(WALL_T + PLAYER_R, safeX, SCENE_W - WALL_T - PLAYER_R);
+                safeY = qBound(WALL_T + PLAYER_R, safeY, SCENE_H - WALL_T - PLAYER_R);
+                m_player->setPos(safeX, safeY);
+                m_player->vx = 0.0;
+                m_player->vy = 0.0;
+                m_stunCounter = 60;
+                if (!m_invincible) {
+                    onWallHit();
+                }
+                return;
+            }
+        }
+
+        // 7) check Goal
         const auto collisions = m_scene->collidingItems(m_player);
         for (QGraphicsItem *item : collisions) {
             if (dynamic_cast<Goal *>(item)) {
@@ -582,8 +745,8 @@ void MissionPage::setupMission5()
     auto *page = new QWidget(this);
     page->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
     auto *pageLayout = new QVBoxLayout(page);
-    pageLayout->setContentsMargins(10, 4, 10, 4);
-    pageLayout->setSpacing(6);
+    pageLayout->setContentsMargins(4, 2, 4, 2);
+    pageLayout->setSpacing(2);
 
     // Header
     auto *header = new QLabel(
@@ -600,36 +763,14 @@ void MissionPage::setupMission5()
     divider->setStyleSheet(QStringLiteral(
         "background-color: #00ff41; max-height: 1px; border: none;"));
     pageLayout->addWidget(divider);
-    pageLayout->addSpacing(4);
 
-    // Main panel
-    auto *mainPanel = new QWidget(page);
-    mainPanel->setStyleSheet(QStringLiteral(
-        "background: #111; border: none; border-radius: 8px;"));
-    auto *panelLayout = new QVBoxLayout(mainPanel);
-    panelLayout->setContentsMargins(10, 8, 10, 8);
-    panelLayout->setSpacing(4);
-
-    // Instruction
-    auto *instrLabel = new QLabel(QStringLiteral(
-        "보드를 기울여 데이터 코어(공)를 GOAL 지점까지 이동시키세요."),
-        mainPanel);
-    instrLabel->setAlignment(Qt::AlignCenter);
-    instrLabel->setWordWrap(true);
-    instrLabel->setStyleSheet(QStringLiteral(
-        "color: #9ca3af; font-size: 13px; "
-        "font-family: 'Consolas', monospace; background: transparent; "
-        "border: none;"));
-    panelLayout->addWidget(instrLabel);
-
-    // Maze game widget
-    auto *mazeGame = new MazeGameWidget(mainPanel);
+    // Maze game widget (directly under divider, no wrapper panel)
+    auto *mazeGame = new MazeGameWidget(page);
     mazeGame->onGoalReached = [this]() {
         showResultPopup(true);
     };
-    panelLayout->addWidget(mazeGame, 1);
+    pageLayout->addWidget(mazeGame, 1);
 
-    pageLayout->addWidget(mainPanel, 1);
     m_contentLayout->addWidget(page);
 }
 
