@@ -298,7 +298,7 @@ void ReadyPage::setupUi()
     });
 
     auto *helpButton = new QPushButton(
-        MissionPage::isOperatorMode() ? QStringLiteral("SKIP ▶") : QStringLiteral("GUIDE"),
+        MissionPage::isOperatorMode() ? QStringLiteral("SKIP") : QStringLiteral("GUIDE"),
         headerButtonArea);
     helpButton->setObjectName(QStringLiteral("helpButton"));
     helpButton->setCursor(Qt::PointingHandCursor);
@@ -891,7 +891,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
     QWidget *topLevel = window();
     const QSize screenSize = topLevel->size();
 
-    // ═══ 1단계: 부팅 로그 화면 ═══
+    // ═══ 1단계: 부팅 로그 화면 (갓찌 등장으로 중단) ═══
     {
         auto *dlg = new QDialog(topLevel);
         dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
@@ -923,8 +923,8 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                   << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Thermal Control Unit")
                   << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Gyro Navigation System")
                   << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> rmmod virus.ko ... <span style='color:#00ff41'>SUCCESS</span>")
-                  << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#00ff41'>[  OK  ]</span> All security layers restored")
-                  << QStringLiteral("<span style='color:#888'>[17:45:08]</span> ...");
+                  << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff4444'>[ WARN ]</span> <span style='color:#ffcc00'>Unauthorized entity detected - scanning kernel...</span>")
+                  << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff2222'>[ALERT ]</span> <span style='color:#ff2222'>HAMSTER HIJACKED BOOT SEQUENCE</span>");
 
         auto *bootTimer = new QTimer(dlg);
         bootTimer->setSingleShot(true);
@@ -934,7 +934,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             [textLabel, bootTimer, bootLines, lineIdx, dlg]() {
                 const int idx = *lineIdx;
                 if (idx >= bootLines.size()) {
-                    QTimer::singleShot(2500, dlg, &QDialog::accept);
+                    QTimer::singleShot(1500, dlg, &QDialog::accept);
                     return;
                 }
                 QString html = textLabel->text();
@@ -948,6 +948,453 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         bootTimer->start(1200);
         dlg->exec();
         dlg->deleteLater();
+    }
+
+    // ═══ 1-B: 갓찌 돌발 퀴즈 이벤트 ═══
+    {
+        qDebug() << "[ENDING] Ending quiz event started";
+
+        if (m_serverMessageCb) {
+            QJsonObject msg;
+            msg["type"] = "event_status";
+            msg["event"] = "ending_quiz";
+            msg["status"] = "started";
+            m_serverMessageCb(msg);
+        }
+
+        // --- 긴급 알림 다이얼로그 ---
+        {
+            auto *dlg = new QDialog(topLevel);
+            dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            dlg->setFixedSize(500, 220);
+            dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #ff2222;"));
+
+            auto *eLayout = new QVBoxLayout(dlg);
+            eLayout->setContentsMargins(24, 20, 24, 16);
+            eLayout->setSpacing(12);
+
+            auto *msgLabel = new QLabel(dlg);
+            msgLabel->setWordWrap(true);
+            msgLabel->setAlignment(Qt::AlignCenter);
+            msgLabel->setText(QStringLiteral(
+                "[EMERGENCY ALERT]\n\n"
+                "갓찌가 부팅 시퀀스를 탈취했습니다!\n"
+                "돌발 퀴즈 이벤트가 시작됩니다."));
+            msgLabel->setStyleSheet(QStringLiteral(
+                "color: #ff4444; font-size: 16px; font-weight: bold; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+            eLayout->addWidget(msgLabel, 1);
+
+            auto *eBtnRow = new QHBoxLayout();
+            eBtnRow->addStretch();
+            auto *btnOk = new QPushButton(QStringLiteral("확인"), dlg);
+            btnOk->setFixedSize(100, 36);
+            btnOk->setCursor(Qt::PointingHandCursor);
+            btnOk->setFocusPolicy(Qt::NoFocus);
+            btnOk->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #1a1a2e; color: #ff4444; border: 1px solid #ff4444; "
+                "border-radius: 4px; font-size: 14px; font-weight: bold; font-family: Consolas; }"
+                "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
+            eBtnRow->addWidget(btnOk);
+            eLayout->addLayout(eBtnRow);
+
+            QObject::connect(btnOk, &QPushButton::clicked, dlg, &QDialog::accept);
+
+            auto *overlay = new QWidget(topLevel);
+            overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+            overlay->setGeometry(topLevel->rect());
+            overlay->show();
+            overlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+            }
+
+            dlg->exec();
+            overlay->hide();
+            overlay->deleteLater();
+        }
+
+        // 실패 팝업 헬퍼
+        auto showFailPopup = [topLevel]() {
+            auto *failDlg = new QDialog(topLevel);
+            failDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            failDlg->setAttribute(Qt::WA_DeleteOnClose);
+            failDlg->setFixedSize(520, 380);
+            failDlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #ff2222;"));
+
+            auto *fLayout = new QVBoxLayout(failDlg);
+            fLayout->setContentsMargins(24, 20, 24, 16);
+            fLayout->setSpacing(12);
+
+            auto *fMsg = new QLabel(failDlg);
+            fMsg->setWordWrap(true);
+            fMsg->setAlignment(Qt::AlignCenter);
+            fMsg->setTextFormat(Qt::RichText);
+            fMsg->setText(QStringLiteral(
+                "<div style='font-family: Consolas, monospace; color: #666; font-size: 11px;'>"
+                "--------------------------------</div>"
+                "<div style='font-family: Consolas, monospace; color: #ff4444; font-size: 20px; "
+                "font-weight: bold; margin-top: 12px;'>오답입니다.</div>"
+                "<div style='font-family: Consolas, monospace; color: #ffcc00; font-size: 14px; "
+                "margin-top: 16px; font-style: italic;'>"
+                "\"찌이익!!! (내 마음도 모르는 바보들이다 찍!)\"</div>"
+                "<div style='font-family: Consolas, monospace; color: #cccccc; font-size: 14px; "
+                "margin-top: 16px; line-height: 170%;'>"
+                "갓찌가 분노하여 전원 코드를 강하게 흔들고 있습니다!<br>"
+                "화면이 깜빡거립니다.<br>"
+                "서둘러 다른 정답을 골라 갓찌를 달래주십시오!</div>"
+                "<div style='font-family: Consolas, monospace; color: #666; font-size: 11px; "
+                "margin-top: 12px;'>"
+                "--------------------------------</div>"));
+            fMsg->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+            fLayout->addWidget(fMsg, 1);
+
+            auto *fBtnRow = new QHBoxLayout();
+            fBtnRow->addStretch();
+            auto *btnRetry = new QPushButton(QStringLiteral("다시 갓찌 달래기"), failDlg);
+            btnRetry->setFixedSize(220, 44);
+            btnRetry->setCursor(Qt::PointingHandCursor);
+            btnRetry->setFocusPolicy(Qt::NoFocus);
+            btnRetry->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #1a0000; color: #ff4444; border: 2px solid #ff4444; "
+                "border-radius: 6px; font-size: 15px; font-weight: bold; font-family: Consolas; }"
+                "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
+            fBtnRow->addWidget(btnRetry);
+            fBtnRow->addStretch();
+            fLayout->addLayout(fBtnRow);
+
+            QObject::connect(btnRetry, &QPushButton::clicked, failDlg, &QDialog::accept);
+
+            auto *fOverlay = new QWidget(topLevel);
+            fOverlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+            fOverlay->setGeometry(topLevel->rect());
+            fOverlay->show();
+            fOverlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                failDlg->move(geo.center() - QPoint(failDlg->width() / 2, failDlg->height() / 2));
+            }
+
+            failDlg->exec();
+            fOverlay->hide();
+            fOverlay->deleteLater();
+        };
+
+        // --- 문제 1: 마우스 ---
+        {
+            auto *dlg = new QDialog(topLevel);
+            dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            dlg->setAttribute(Qt::WA_DeleteOnClose, false);
+            dlg->setFixedSize(620, 440);
+
+            auto *mainLayout = new QVBoxLayout(dlg);
+            mainLayout->setContentsMargins(0, 0, 0, 0);
+            mainLayout->setSpacing(0);
+
+            auto *outerFrame = new QFrame(dlg);
+            outerFrame->setStyleSheet(QStringLiteral(
+                "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+            auto *outerGlow = new QGraphicsDropShadowEffect(outerFrame);
+            outerGlow->setBlurRadius(40);
+            outerGlow->setColor(QColor(255, 34, 34, 160));
+            outerGlow->setOffset(0, 0);
+            outerFrame->setGraphicsEffect(outerGlow);
+
+            auto *outerLayout = new QVBoxLayout(outerFrame);
+            outerLayout->setContentsMargins(20, 16, 20, 16);
+            outerLayout->setSpacing(12);
+
+            auto *titleLabel = new QLabel(QStringLiteral("갓찌 돌발 퀴즈 — 문제 1"), outerFrame);
+            titleLabel->setAlignment(Qt::AlignCenter);
+            titleLabel->setStyleSheet(QStringLiteral(
+                "color: #ff2222; font-size: 22px; font-weight: 900; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none; "
+                "text-shadow: 0 0 10px rgba(255,34,34,0.5);"));
+            outerLayout->addWidget(titleLabel);
+
+            auto *innerFrame = new QFrame(outerFrame);
+            innerFrame->setStyleSheet(QStringLiteral(
+                "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+            auto *innerLayout = new QVBoxLayout(innerFrame);
+            innerLayout->setContentsMargins(16, 14, 16, 14);
+            innerLayout->setSpacing(10);
+
+            auto *questionLabel = new QLabel(innerFrame);
+            questionLabel->setWordWrap(true);
+            questionLabel->setAlignment(Qt::AlignCenter);
+            questionLabel->setText(QStringLiteral(
+                "갓찌가 보안 서버실에 처음 침투했을 때,\n"
+                "불쌍하다며 가장 먼저 바깥으로 구출해 준\n"
+                "컴퓨터 부품은?\n"));
+            questionLabel->setStyleSheet(QStringLiteral(
+                "color: #ffffff; font-size: 15px; font-family: 'Consolas', monospace; "
+                "background: transparent; border: none; line-height: 150%;"));
+            innerLayout->addWidget(questionLabel);
+
+            auto *choicesLabel = new QLabel(innerFrame);
+            choicesLabel->setWordWrap(true);
+            choicesLabel->setAlignment(Qt::AlignCenter);
+            choicesLabel->setText(QStringLiteral(
+                "A) 키보드\n"
+                "B) 마우스\n"
+                "C) 모니터\n"
+                "D) 그래픽카드"));
+            choicesLabel->setStyleSheet(QStringLiteral(
+                "color: #ffcc00; font-size: 16px; font-weight: bold; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none; "
+                "line-height: 160%;"));
+            innerLayout->addWidget(choicesLabel);
+
+            outerLayout->addWidget(innerFrame, 1);
+
+            auto *btnRow = new QHBoxLayout();
+            btnRow->setSpacing(12);
+            btnRow->addStretch();
+
+            const QStringList q1Choices = { QStringLiteral("A"), QStringLiteral("B"),
+                                             QStringLiteral("C"), QStringLiteral("D") };
+            for (const QString &ch : q1Choices) {
+                auto *btn = new QPushButton(ch, outerFrame);
+                btn->setFixedSize(80, 44);
+                btn->setCursor(Qt::PointingHandCursor);
+                btn->setFocusPolicy(Qt::NoFocus);
+                btn->setStyleSheet(QStringLiteral(
+                    "QPushButton { background: #1a0000; color: #ffffff; border: 2px solid #ff4444; "
+                    "border-radius: 6px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
+                    "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"
+                    "QPushButton:pressed { background: #cc0000; }"));
+                btnRow->addWidget(btn);
+
+                QObject::connect(btn, &QPushButton::clicked, dlg,
+                    [dlg, ch, &showFailPopup]() {
+                        if (ch == QStringLiteral("B")) {
+                            dlg->accept();
+                        } else {
+                            showFailPopup();
+                        }
+                    });
+            }
+            btnRow->addStretch();
+            outerLayout->addLayout(btnRow);
+
+            mainLayout->addWidget(outerFrame);
+
+            auto *overlay = new QWidget(topLevel);
+            overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 200);"));
+            overlay->setGeometry(topLevel->rect());
+            overlay->show();
+            overlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+            }
+
+            dlg->exec();
+            overlay->hide();
+            overlay->deleteLater();
+            dlg->deleteLater();
+        }
+
+        // --- 문제 2: C 언어 ---
+        {
+            auto *dlg = new QDialog(topLevel);
+            dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            dlg->setAttribute(Qt::WA_DeleteOnClose, false);
+            dlg->setFixedSize(620, 440);
+
+            auto *mainLayout = new QVBoxLayout(dlg);
+            mainLayout->setContentsMargins(0, 0, 0, 0);
+            mainLayout->setSpacing(0);
+
+            auto *outerFrame = new QFrame(dlg);
+            outerFrame->setStyleSheet(QStringLiteral(
+                "background-color: #1a0000; border: 3px solid #ff2222; border-radius: 8px;"));
+            auto *outerGlow = new QGraphicsDropShadowEffect(outerFrame);
+            outerGlow->setBlurRadius(40);
+            outerGlow->setColor(QColor(255, 34, 34, 160));
+            outerGlow->setOffset(0, 0);
+            outerFrame->setGraphicsEffect(outerGlow);
+
+            auto *outerLayout = new QVBoxLayout(outerFrame);
+            outerLayout->setContentsMargins(20, 16, 20, 16);
+            outerLayout->setSpacing(12);
+
+            auto *titleLabel = new QLabel(QStringLiteral("갓찌 돌발 퀴즈 — 문제 2"), outerFrame);
+            titleLabel->setAlignment(Qt::AlignCenter);
+            titleLabel->setStyleSheet(QStringLiteral(
+                "color: #ff2222; font-size: 22px; font-weight: 900; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none; "
+                "text-shadow: 0 0 10px rgba(255,34,34,0.5);"));
+            outerLayout->addWidget(titleLabel);
+
+            auto *innerFrame = new QFrame(outerFrame);
+            innerFrame->setStyleSheet(QStringLiteral(
+                "background-color: #0d0000; border: 1px solid #ff4444; border-radius: 4px;"));
+            auto *innerLayout = new QVBoxLayout(innerFrame);
+            innerLayout->setContentsMargins(16, 14, 16, 14);
+            innerLayout->setSpacing(10);
+
+            auto *questionLabel = new QLabel(innerFrame);
+            questionLabel->setWordWrap(true);
+            questionLabel->setAlignment(Qt::AlignCenter);
+            questionLabel->setText(QStringLiteral(
+                "갓찌가 12기 교육생들 어깨너머로 배워서,\n"
+                "가장 완벽하게 마스터한 프로그래밍 언어는\n"
+                "무엇일까?\n"));
+            questionLabel->setStyleSheet(QStringLiteral(
+                "color: #ffffff; font-size: 15px; font-family: 'Consolas', monospace; "
+                "background: transparent; border: none; line-height: 150%;"));
+            innerLayout->addWidget(questionLabel);
+
+            auto *choicesLabel = new QLabel(innerFrame);
+            choicesLabel->setWordWrap(true);
+            choicesLabel->setAlignment(Qt::AlignCenter);
+            choicesLabel->setText(QStringLiteral(
+                "A) Java\n"
+                "B) Python\n"
+                "C) C 언어\n"
+                "D) JavaScript"));
+            choicesLabel->setStyleSheet(QStringLiteral(
+                "color: #ffcc00; font-size: 16px; font-weight: bold; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none; "
+                "line-height: 160%;"));
+            innerLayout->addWidget(choicesLabel);
+
+            outerLayout->addWidget(innerFrame, 1);
+
+            auto *btnRow = new QHBoxLayout();
+            btnRow->setSpacing(12);
+            btnRow->addStretch();
+
+            const QStringList q2Choices = { QStringLiteral("A"), QStringLiteral("B"),
+                                             QStringLiteral("C"), QStringLiteral("D") };
+            for (const QString &ch : q2Choices) {
+                auto *btn = new QPushButton(ch, outerFrame);
+                btn->setFixedSize(80, 44);
+                btn->setCursor(Qt::PointingHandCursor);
+                btn->setFocusPolicy(Qt::NoFocus);
+                btn->setStyleSheet(QStringLiteral(
+                    "QPushButton { background: #1a0000; color: #ffffff; border: 2px solid #ff4444; "
+                    "border-radius: 6px; font-size: 20px; font-weight: 900; font-family: Consolas; }"
+                    "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"
+                    "QPushButton:pressed { background: #cc0000; }"));
+                btnRow->addWidget(btn);
+
+                QObject::connect(btn, &QPushButton::clicked, dlg,
+                    [dlg, ch, &showFailPopup]() {
+                        if (ch == QStringLiteral("C")) {
+                            dlg->accept();
+                        } else {
+                            showFailPopup();
+                        }
+                    });
+            }
+            btnRow->addStretch();
+            outerLayout->addLayout(btnRow);
+
+            mainLayout->addWidget(outerFrame);
+
+            auto *overlay = new QWidget(topLevel);
+            overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 200);"));
+            overlay->setGeometry(topLevel->rect());
+            overlay->show();
+            overlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+            }
+
+            dlg->exec();
+            overlay->hide();
+            overlay->deleteLater();
+            dlg->deleteLater();
+        }
+
+        // --- 성공 팝업 ---
+        {
+            auto *dlg = new QDialog(topLevel);
+            dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            dlg->setFixedSize(520, 440);
+            dlg->setStyleSheet(QStringLiteral("background-color: #0c0c0c; border: 2px solid #00ff41;"));
+
+            auto *sLayout = new QVBoxLayout(dlg);
+            sLayout->setContentsMargins(24, 20, 24, 16);
+            sLayout->setSpacing(12);
+
+            auto *sMsg = new QLabel(dlg);
+            sMsg->setWordWrap(true);
+            sMsg->setAlignment(Qt::AlignCenter);
+            sMsg->setTextFormat(Qt::RichText);
+            sMsg->setText(QStringLiteral(
+                "<div style='font-family: Consolas, monospace; color: #666; font-size: 11px;'>"
+                "--------------------------------</div>"
+                "<div style='font-family: Consolas, monospace; color: #00ff41; font-size: 16px; "
+                "font-weight: bold; margin-top: 10px; line-height: 180%;'>"
+                "정답 입력 완료<br>"
+                "갓찌의 만족도 100% 달성<br>"
+                "전원 코드 안전 확보</div>"
+                "<div style='font-family: Consolas, monospace; color: #ffcc00; font-size: 14px; "
+                "margin-top: 14px; font-style: italic;'>"
+                "\"찌익... (분하지만 정답이다 찍. 훌륭한 교육생들이었다 찍...)\"</div>"
+                "<div style='font-family: Consolas, monospace; color: #cccccc; font-size: 14px; "
+                "margin-top: 14px; line-height: 170%;'>"
+                "갓찌가 해바라기씨를 오물거리며 서버실 구석으로 물러납니다.<br>"
+                "드디어 마스터 코드가 활성화되었습니다.<br><br>"
+                "<span style='color: #00ff41; font-weight: bold;'>탈출을 축하합니다!</span></div>"
+                "<div style='font-family: Consolas, monospace; color: #666; font-size: 11px; "
+                "margin-top: 10px;'>"
+                "--------------------------------</div>"));
+            sMsg->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+            sLayout->addWidget(sMsg, 1);
+
+            auto *sBtnRow = new QHBoxLayout();
+            sBtnRow->addStretch();
+            auto *btnOk = new QPushButton(QStringLiteral("퇴실 승인"), dlg);
+            btnOk->setFixedSize(200, 44);
+            btnOk->setCursor(Qt::PointingHandCursor);
+            btnOk->setFocusPolicy(Qt::NoFocus);
+            btnOk->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #0a2e0a; color: #00ff41; border: 2px solid #00ff41; "
+                "border-radius: 6px; font-size: 16px; font-weight: bold; font-family: Consolas; }"
+                "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
+            sBtnRow->addWidget(btnOk);
+            sBtnRow->addStretch();
+            sLayout->addLayout(sBtnRow);
+
+            QObject::connect(btnOk, &QPushButton::clicked, dlg, &QDialog::accept);
+
+            auto *overlay = new QWidget(topLevel);
+            overlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+            overlay->setGeometry(topLevel->rect());
+            overlay->show();
+            overlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                dlg->move(geo.center() - QPoint(dlg->width() / 2, dlg->height() / 2));
+            }
+
+            dlg->exec();
+            overlay->hide();
+            overlay->deleteLater();
+        }
+
+        if (m_serverMessageCb) {
+            QJsonObject msg;
+            msg["type"] = "event_status";
+            msg["event"] = "ending_quiz";
+            msg["status"] = "completed";
+            m_serverMessageCb(msg);
+        }
+
+        qDebug() << "[ENDING] Ending quiz event completed";
     }
 
     // ═══ 2단계: 빨간 글리치 (ACCESS DENIED + 흔들림) ═══
@@ -1092,7 +1539,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         // ── Decorative top line ──
         auto *topLine = new QLabel(
-            QStringLiteral("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"), contentWidget);
+            QStringLiteral("----------------------------------------"), contentWidget);
         topLine->setAlignment(Qt::AlignCenter);
         topLine->setStyleSheet(QStringLiteral(
             "color: rgba(0,191,255,60); font-size: 12px; font-family: Consolas; "
@@ -1176,7 +1623,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         // ── Decorative bottom line ──
         auto *bottomLine = new QLabel(
-            QStringLiteral("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"), contentWidget);
+            QStringLiteral("----------------------------------------"), contentWidget);
         bottomLine->setAlignment(Qt::AlignCenter);
         bottomLine->setStyleSheet(QStringLiteral(
             "color: rgba(0,191,255,60); font-size: 12px; font-family: Consolas; "
@@ -1251,7 +1698,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         vbox->setSpacing(10);
 
         // ── 닫기 버튼 (우상단) ──
-        auto *closeBtn = new QPushButton(QStringLiteral("✕"), dlg);
+        auto *closeBtn = new QPushButton(QStringLiteral("X"), dlg);
         closeBtn->setFixedSize(36, 36);
         closeBtn->setCursor(Qt::PointingHandCursor);
         closeBtn->setFocusPolicy(Qt::NoFocus);
@@ -1398,7 +1845,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 }
                 overlay->accept();
             } else {
-                errLabel->setText(QStringLiteral("❌ 잘못된 코드입니다. 다시 입력해주세요."));
+                errLabel->setText(QStringLiteral("잘못된 코드입니다. 다시 입력해주세요."));
                 errLabel->show();
                 inputLine->clear();
             }
