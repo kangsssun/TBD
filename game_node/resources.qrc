@@ -10,6 +10,7 @@
         <file>images/mission5_complete.png</file>
         <file>images/devil.png</file>
         <file>images/ball.png</file>
+        <file>images/ending_qr.png</file>
         <file>fonts/NotoSansKR-Regular.ttf</file>
     </qresource>
 </RCC>

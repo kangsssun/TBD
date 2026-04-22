@@ -356,12 +356,12 @@ void GameNode::handleServerMessage(const QJsonObject &json)
         bool isLast = json["is_last"].toBool(false);
         qDebug() << "[SYSTEM] Recovery code received:" << code << "rank:" << rank;
         if (m_readyPage) {
-            m_readyPage->showRecoveryCodeInput(code, clearTime, rank, totalTeams, isLast);
+            m_readyPage->showEndingSequence(code);
         }
     }
     else if (type == "recovery_code_wrong") {
         qDebug() << "[SYSTEM] Recovery code wrong!";
-        // 노드에서 처리 — showRecoveryCodeInput 내부에서 처리
+        // 엔딩 시퀀스 내부 키패드에서 자체 처리
     }
     else if (type == "final_clear") {
         // 이제 recovery_code 입력 성공 시 직접 showEndingSequence를 호출하므로
