@@ -579,7 +579,7 @@ void MissionPage::showMission4Result(bool correct)
             QColor(0, 255, 65, 140));
 
         showImagePopup(
-            QStringLiteral(":/images/mission4_complete.png"),
+            QStringLiteral(":/images/mission3_complete.png"),
             QStringLiteral("\u25b6 확인"),
             QStringLiteral("#00ff41"),
             QColor(0, 255, 65, 140));
