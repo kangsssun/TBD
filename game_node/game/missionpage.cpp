@@ -7,6 +7,8 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QGraphicsDropShadowEffect>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
 #include <QPixmap>
 #include <QDialog>
 #include <QApplication>
@@ -523,8 +525,8 @@ void MissionPage::showStoryPopup()
         evaluateMission3CameraPreview();
     }
 
-    // 운영자 모드: 스토리 팝업 스킵 (미션5는 자이로 캘리브레이션 필요하므로 예외)
-    if (s_operatorMode && m_missionNumber != 5) {
+    // 운영자 모드: 스토리 팝업 스킵
+    if (s_operatorMode) {
         return;
     }
 
@@ -574,10 +576,33 @@ void MissionPage::showImagePopup(const QString &imagePath,
         refreshMission3PreviewPlaceholder();
     }
 
+    // Load pixmap first to determine dialog size
+    QPixmap pix(imagePath);
+    const int border = 2;   // frame border width
+    const int pad    = 10;  // frame content margins (each side)
+    const int extra  = (border + pad) * 2;  // total extra space around image
+
+    int dlgW = 540;  // fallback
+    int dlgH = 360;
+    if (!pix.isNull()) {
+        // Limit to screen size if the image is very large
+        QRect screenGeo;
+        if (auto *scr = QApplication::primaryScreen())
+            screenGeo = scr->availableGeometry();
+        int maxW = screenGeo.isValid() ? screenGeo.width()  - 40 : 1920;
+        int maxH = screenGeo.isValid() ? screenGeo.height() - 40 : 1080;
+
+        if (pix.width() + extra > maxW || pix.height() + extra > maxH) {
+            pix = pix.scaled(maxW - extra, maxH - extra, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        dlgW = pix.width()  + extra;
+        dlgH = pix.height() + extra;
+    }
+
     auto *dialog = new QDialog(this);
     dialog->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setFixedSize(540, 360);
+    dialog->setFixedSize(dlgW, dlgH);
     dialog->setStyleSheet(QStringLiteral("background-color: #0c0c0c;"));
 
     auto *mainLayout = new QVBoxLayout(dialog);
@@ -587,22 +612,32 @@ void MissionPage::showImagePopup(const QString &imagePath,
     auto *frame = new QFrame(dialog);
     frame->setObjectName(QStringLiteral("imgPopupFrame"));
     frame->setStyleSheet(QStringLiteral(
-        "QFrame#imgPopupFrame { background-color: #0c0c0c; border: 2px solid %1; border-radius: 6px; }").arg(btnColor));
+        "QFrame#imgPopupFrame { background-color: #0c0c0c; border: %1px solid %2; border-radius: 6px; }").arg(border).arg(btnColor));
     auto *frameLayout = new QVBoxLayout(frame);
-    frameLayout->setContentsMargins(10, 10, 10, 10);
+    frameLayout->setContentsMargins(pad, pad, pad, pad);
     frameLayout->setSpacing(0);
 
     auto *imageLabel = new QLabel(frame);
     imageLabel->setAlignment(Qt::AlignCenter);
     imageLabel->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
-    QPixmap pix(imagePath);
     if (!pix.isNull()) {
-        imageLabel->setPixmap(pix.scaled(510, 330, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        imageLabel->setPixmap(pix);
     } else {
         imageLabel->setText(QStringLiteral("[ IMAGE ]"));
         imageLabel->setStyleSheet(QStringLiteral("color: #666; font-size: 18px; background: transparent; border: none;"));
     }
     frameLayout->addWidget(imageLabel, 1);
+
+    // Fade-in effect: image starts invisible and fades to full opacity
+    auto *fadeEffect = new QGraphicsOpacityEffect(imageLabel);
+    fadeEffect->setOpacity(0.0);
+    imageLabel->setGraphicsEffect(fadeEffect);
+
+    auto *fadeAnim = new QPropertyAnimation(fadeEffect, "opacity", dialog);
+    fadeAnim->setDuration(1200);
+    fadeAnim->setStartValue(0.0);
+    fadeAnim->setEndValue(1.0);
+    fadeAnim->setEasingCurve(QEasingCurve::InOutQuad);
 
     mainLayout->addWidget(frame);
 
@@ -617,6 +652,9 @@ void MissionPage::showImagePopup(const QString &imagePath,
     overlay->setGeometry(topLevel->rect());
     overlay->show();
     overlay->raise();
+
+    // Start fade-in animation
+    fadeAnim->start();
 
     // Auto-dismiss after 5 seconds
     QTimer::singleShot(5000, dialog, &QDialog::accept);

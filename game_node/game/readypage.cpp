@@ -298,7 +298,7 @@ void ReadyPage::setupUi()
     });
 
     auto *helpButton = new QPushButton(
-        MissionPage::isOperatorMode() ? QStringLiteral("SKIP") : QStringLiteral("GUIDE"),
+        QStringLiteral("GUIDE"),
         headerButtonArea);
     helpButton->setObjectName(QStringLiteral("helpButton"));
     helpButton->setCursor(Qt::PointingHandCursor);
@@ -311,13 +311,9 @@ void ReadyPage::setupUi()
             if (!cur) return;
             const int curNum = cur->missionNumber();
             if (curNum >= 5) {
-                // Last mission: go to ending via server (recovery code flow)
+                // Operator mode: skip directly to ending sequence
                 helpButton->setEnabled(false);
-                if (m_serverMessageCb) {
-                    QJsonObject msg;
-                    msg["type"] = "game_clear";
-                    m_serverMessageCb(msg);
-                }
+                showEndingSequence(QStringLiteral("0000"), QStringLiteral("00:00"), 0, 0, false);
                 return;
             }
 
@@ -762,15 +758,33 @@ void ReadyPage::showEvent1()
             btnRow->addWidget(btn);
 
             QObject::connect(btn, &QPushButton::clicked, dlg,
-                [this, dlg, ch, statusLabel, &solved]() {
+                [this, dlg, ch, statusLabel, &solved, topLevel]() {
                     if (ch == QStringLiteral("B")) {
                         // 정답
                         solved = true;
                         dlg->accept();
                     } else {
-                        // 오답 — 타이머 1분 감소 요청
-                        statusLabel->setText(QStringLiteral("오답! 타이머가 1분 감소합니다."));
-                        statusLabel->setVisible(true);
+                        // 오답 — 화면 깜빡임 효과
+                        auto *flashWidget = new QWidget(topLevel);
+                        flashWidget->setStyleSheet(QStringLiteral("background-color: rgba(255, 50, 50, 200);"));
+                        flashWidget->setGeometry(topLevel->rect());
+                        flashWidget->hide();
+                        flashWidget->raise();
+
+                        auto *flickerTimer = new QTimer(dlg);
+                        auto flickerCount = std::make_shared<int>(0);
+                        QObject::connect(flickerTimer, &QTimer::timeout, dlg, [flashWidget, flickerTimer, flickerCount]() {
+                            if (*flickerCount >= 8) {
+                                flashWidget->hide();
+                                flickerTimer->stop();
+                                return;
+                            }
+                            flashWidget->setVisible(!flashWidget->isVisible());
+                            (*flickerCount)++;
+                        });
+                        flickerTimer->start(100);
+
+                        // 타이머 1분 감소 요청
                         if (m_serverMessageCb) {
                             QJsonObject msg;
                             msg["type"] = "timer_penalty";
@@ -780,9 +794,65 @@ void ReadyPage::showEvent1()
                         // 타이머 로컬도 감소
                         m_remainingSeconds = qMax(0, m_remainingSeconds - 60);
                         updateHeader();
-                        QTimer::singleShot(1500, statusLabel, [statusLabel]() {
-                            statusLabel->setVisible(false);
-                        });
+
+                        // 오답 팝업 표시
+                        auto *failDlg = new QDialog(topLevel);
+                        failDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+                        failDlg->setAttribute(Qt::WA_DeleteOnClose);
+                        failDlg->setFixedSize(420, 240);
+                        failDlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #ff2222;"));
+
+                        auto *fLayout = new QVBoxLayout(failDlg);
+                        fLayout->setContentsMargins(24, 20, 24, 16);
+                        fLayout->setSpacing(12);
+
+                        auto *fMsg = new QLabel(failDlg);
+                        fMsg->setWordWrap(true);
+                        fMsg->setAlignment(Qt::AlignCenter);
+                        fMsg->setTextFormat(Qt::RichText);
+                        fMsg->setText(QStringLiteral(
+                            "<div style='font-family: Consolas, monospace; color: #ff4444; font-size: 20px; "
+                            "font-weight: bold;'>오답!</div>"
+                            "<div style='font-family: Consolas, monospace; color: #cccccc; font-size: 15px; "
+                            "margin-top: 14px; line-height: 170%;'>"
+                            "바이러스가 확산 중입니다!<br>"
+                            "타이머가 <span style='color:#ff4444; font-weight:bold;'>1분</span> 감소됩니다.</div>"));
+                        fMsg->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+                        fLayout->addWidget(fMsg, 1);
+
+                        auto *fBtnRow = new QHBoxLayout();
+                        fBtnRow->addStretch();
+                        auto *btnRetry = new QPushButton(QStringLiteral("다시 시도"), failDlg);
+                        btnRetry->setFixedSize(160, 40);
+                        btnRetry->setCursor(Qt::PointingHandCursor);
+                        btnRetry->setFocusPolicy(Qt::NoFocus);
+                        btnRetry->setStyleSheet(QStringLiteral(
+                            "QPushButton { background: #000000; color: #ff4444; border: 2px solid #ff4444; "
+                            "border-radius: 6px; font-size: 15px; font-weight: bold; font-family: Consolas; }"
+                            "QPushButton:hover { background: #ff4444; color: #0c0c0c; }"));
+                        fBtnRow->addWidget(btnRetry);
+                        fBtnRow->addStretch();
+                        fLayout->addLayout(fBtnRow);
+
+                        QObject::connect(btnRetry, &QPushButton::clicked, failDlg, &QDialog::accept);
+
+                        auto *fOverlay = new QWidget(topLevel);
+                        fOverlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+                        fOverlay->setGeometry(topLevel->rect());
+                        fOverlay->show();
+                        fOverlay->raise();
+
+                        if (auto *screen = QApplication::primaryScreen()) {
+                            const QRect geo = screen->availableGeometry();
+                            failDlg->move(geo.center() - QPoint(failDlg->width() / 2, failDlg->height() / 2));
+                        }
+
+                        failDlg->exec();
+                        flickerTimer->stop();
+                        flashWidget->hide();
+                        flashWidget->deleteLater();
+                        fOverlay->hide();
+                        fOverlay->deleteLater();
                     }
                 });
         }
@@ -923,13 +993,19 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         QStringList bootLines;
         bootLines << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Booting ESCAPE-OS v12.0...")
-                  << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Beacon Repair....")
-                  << QStringLiteral("<span style='color:#888'>[17:45:01]</span> <span style='color:#00ff41'>[  OK  ]</span> Started LED Beacon Service")
+                  << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Initializing kernel modules...")
+                  << QStringLiteral("<span style='color:#888'>[17:45:01]</span> Beacon Repair....")
+                  << QStringLiteral("<span style='color:#888'>[17:45:01]</span> <span style='color:#00ff41'>[  OK  ]</span> Mounted /dev/sda1 on /mnt/beacon")
+                  << QStringLiteral("<span style='color:#888'>[17:45:02]</span> <span style='color:#00ff41'>[  OK  ]</span> Started LED Beacon Service")
                   << QStringLiteral("<span style='color:#888'>[17:45:02]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Sound Authentication Module")
                   << QStringLiteral("<span style='color:#888'>[17:45:03]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Camera QR Decoder")
+                  << QStringLiteral("<span style='color:#888'>[17:45:03]</span> <span style='color:#00ff41'>[  OK  ]</span> Loading network interface eth0...")
                   << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Thermal Control Unit")
-                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Gyro Navigation System")
+                  << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Gyro Navigation System")
+                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Reached target Multi-User System")
+                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#ffcc00'>[ INFO ]</span> Scanning kernel for residual threats...")
                   << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> rmmod virus.ko ... <span style='color:#00ff41'>SUCCESS</span>")
+                  << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> Verifying system integrity... checksum OK")
                   << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff4444'>[ WARN ]</span> <span style='color:#ffcc00'>Unauthorized entity detected - scanning kernel...</span>")
                   << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff2222'>[ALERT ]</span> <span style='color:#ff2222'>HAMSTER HIJACKED BOOT SEQUENCE</span>");
 
@@ -949,10 +1025,10 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 html += bootLines.at(idx);
                 textLabel->setText(html);
                 (*lineIdx)++;
-                bootTimer->start(900);
+                bootTimer->start(550);
             });
 
-        bootTimer->start(1200);
+        bootTimer->start(800);
         dlg->exec();
         dlg->deleteLater();
     }
@@ -1081,14 +1157,106 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             fOverlay->show();
             fOverlay->raise();
 
+            // 화면 깜빡임 효과 (흰색 플래시 ×6)
+            auto *flashWidget = new QWidget(topLevel);
+            flashWidget->setStyleSheet(QStringLiteral("background-color: rgba(255, 50, 50, 200);"));
+            flashWidget->setGeometry(topLevel->rect());
+            flashWidget->hide();
+            flashWidget->raise();
+
+            auto *flickerTimer = new QTimer(failDlg);
+            auto flickerCount = std::make_shared<int>(0);
+            QObject::connect(flickerTimer, &QTimer::timeout, failDlg, [flashWidget, flickerTimer, flickerCount]() {
+                if (*flickerCount >= 8) {
+                    flashWidget->hide();
+                    flickerTimer->stop();
+                    return;
+                }
+                flashWidget->setVisible(!flashWidget->isVisible());
+                (*flickerCount)++;
+            });
+            flickerTimer->start(100);
+
             if (auto *screen = QApplication::primaryScreen()) {
                 const QRect geo = screen->availableGeometry();
                 failDlg->move(geo.center() - QPoint(failDlg->width() / 2, failDlg->height() / 2));
             }
 
             failDlg->exec();
+            flickerTimer->stop();
+            flashWidget->hide();
+            flashWidget->deleteLater();
             fOverlay->hide();
             fOverlay->deleteLater();
+        };
+
+        // 정답 해설 팝업 헬퍼
+        auto showExplanationPopup = [topLevel](const QString &qNum, const QString &explanation) {
+            auto *expDlg = new QDialog(topLevel);
+            expDlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+            expDlg->setAttribute(Qt::WA_DeleteOnClose);
+            expDlg->setFixedSize(520, 320);
+            expDlg->setStyleSheet(QStringLiteral("background-color: #000000; border: 2px solid #00ff41;"));
+
+            auto *eLayout = new QVBoxLayout(expDlg);
+            eLayout->setContentsMargins(24, 20, 24, 16);
+            eLayout->setSpacing(12);
+
+            auto *eTitle = new QLabel(qNum, expDlg);
+            eTitle->setAlignment(Qt::AlignCenter);
+            eTitle->setStyleSheet(QStringLiteral(
+                "color: #00ff41; font-size: 20px; font-weight: 900; "
+                "font-family: 'Consolas', monospace; background: transparent; border: none;"));
+            eLayout->addWidget(eTitle);
+
+            auto *eMsg = new QLabel(expDlg);
+            eMsg->setWordWrap(true);
+            eMsg->setAlignment(Qt::AlignCenter);
+            eMsg->setTextFormat(Qt::RichText);
+            eMsg->setText(
+                QStringLiteral(
+                "<div style='font-family: Consolas, monospace; color: #00ff41; font-size: 18px; "
+                "font-weight: bold; margin-top: 8px;'>정답!</div>"
+                "<div style='font-family: Consolas, monospace; color: #ffcc00; font-size: 14px; "
+                "margin-top: 14px; font-style: italic;'>"
+                "\"찌이... (맞혔다 찍...)\"</div>"
+                "<div style='font-family: Consolas, monospace; color: #cccccc; font-size: 15px; "
+                "margin-top: 16px; line-height: 170%;'>")
+                + explanation
+                + QStringLiteral("</div>"));
+            eMsg->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+            eLayout->addWidget(eMsg, 1);
+
+            auto *eBtnRow = new QHBoxLayout();
+            eBtnRow->addStretch();
+            auto *btnNext = new QPushButton(QStringLiteral("\u25b6 다음"), expDlg);
+            btnNext->setFixedSize(160, 44);
+            btnNext->setCursor(Qt::PointingHandCursor);
+            btnNext->setFocusPolicy(Qt::NoFocus);
+            btnNext->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
+                "border-radius: 6px; font-size: 15px; font-weight: bold; font-family: Consolas; }"
+                "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
+            eBtnRow->addWidget(btnNext);
+            eBtnRow->addStretch();
+            eLayout->addLayout(eBtnRow);
+
+            QObject::connect(btnNext, &QPushButton::clicked, expDlg, &QDialog::accept);
+
+            auto *eOverlay = new QWidget(topLevel);
+            eOverlay->setStyleSheet(QStringLiteral("background-color: rgba(0, 0, 0, 180);"));
+            eOverlay->setGeometry(topLevel->rect());
+            eOverlay->show();
+            eOverlay->raise();
+
+            if (auto *screen = QApplication::primaryScreen()) {
+                const QRect geo = screen->availableGeometry();
+                expDlg->move(geo.center() - QPoint(expDlg->width() / 2, expDlg->height() / 2));
+            }
+
+            expDlg->exec();
+            eOverlay->hide();
+            eOverlay->deleteLater();
         };
 
         // --- 문제 1: 마우스 ---
@@ -1134,9 +1302,9 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             questionLabel->setWordWrap(true);
             questionLabel->setAlignment(Qt::AlignCenter);
             questionLabel->setText(QStringLiteral(
-                "갓찌가 보안 서버실에 처음 침투했을 때,\n"
-                "불쌍하다며 가장 먼저 바깥으로 구출해 준\n"
-                "컴퓨터 부품은?\n"));
+                "갓찌가 보안 서버실에 처음 침투했을 때, "
+                "불쌍하다며 가장 먼저 바깥으로 구출해 준 "
+                "컴퓨터 부품은?"));
             questionLabel->setStyleSheet(QStringLiteral(
                 "color: #ffffff; font-size: 15px; font-family: 'Consolas', monospace; "
                 "background: transparent; border: none; line-height: 150%;"));
@@ -1205,6 +1373,11 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             overlay->hide();
             overlay->deleteLater();
             dlg->deleteLater();
+
+            // 문제 1 정답 해설
+            showExplanationPopup(
+                QStringLiteral("문제 1 해설"),
+                QStringLiteral("같은 쥐 친구인 마우스(Mouse)가 잡혀있는 줄 알고 구출해갔습니다."));
         }
 
         // --- 문제 2: C 언어 ---
@@ -1250,9 +1423,9 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             questionLabel->setWordWrap(true);
             questionLabel->setAlignment(Qt::AlignCenter);
             questionLabel->setText(QStringLiteral(
-                "갓찌가 12기 교육생들 어깨너머로 배워서,\n"
-                "가장 완벽하게 마스터한 프로그래밍 언어는\n"
-                "무엇일까?\n"));
+                "갓찌가 12기 교육생들 어깨너머로 배워서, "
+                "가장 완벽하게 마스터한 프로그래밍 언어는 "
+                "무엇일까?"));
             questionLabel->setStyleSheet(QStringLiteral(
                 "color: #ffffff; font-size: 15px; font-family: 'Consolas', monospace; "
                 "background: transparent; border: none; line-height: 150%;"));
@@ -1321,6 +1494,11 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             overlay->hide();
             overlay->deleteLater();
             dlg->deleteLater();
+
+            // 문제 2 정답 해설
+            showExplanationPopup(
+                QStringLiteral("문제 2 해설"),
+                QStringLiteral("햄스터는 해바라기 씨(C)를 가장 좋아하니까!"));
         }
 
         // --- 성공 팝업 ---
@@ -1488,22 +1666,38 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         glitchTimer->setInterval(50);
         const QPoint origPos = content->pos();
 
+        // 빨간 글리치용 랜덤 노이즈 바
+        auto *noiseBar = new QWidget(dlg);
+        noiseBar->setFixedHeight(3);
+        noiseBar->setStyleSheet(QStringLiteral("background-color: rgba(255, 30, 30, 150);"));
+        noiseBar->hide();
+
         QObject::connect(glitchTimer, &QTimer::timeout, dlg,
-            [content, errorDetail, origPos]() {
+            [content, origPos, noiseBar, dlg]() {
                 auto *rng = QRandomGenerator::global();
-                const int dx = rng->bounded(11) - 5;
-                const int dy = rng->bounded(11) - 5;
+                const int dx = rng->bounded(17) - 8;
+                const int dy = rng->bounded(17) - 8;
                 content->move(origPos.x() + dx, origPos.y() + dy);
-                errorDetail->setVisible(rng->bounded(100) > 10);
+
+                // 노이즈 바를 랜덤 위치에 표시
+                if (rng->bounded(100) > 40) {
+                    noiseBar->setGeometry(0, rng->bounded(dlg->height()), dlg->width(), 2 + rng->bounded(4));
+                    noiseBar->setStyleSheet(QStringLiteral("background-color: rgba(255, %1, %1, %2);")
+                        .arg(rng->bounded(80)).arg(100 + rng->bounded(120)));
+                    noiseBar->show();
+                    noiseBar->raise();
+                } else {
+                    noiseBar->hide();
+                }
             });
 
         QTimer::singleShot(0, dlg, [glitchTimer]() { glitchTimer->start(); });
 
         // After 3s, stop glitch → close
-        QTimer::singleShot(3000, dlg, [glitchTimer, content, origPos, errorDetail, dlg]() {
+        QTimer::singleShot(3000, dlg, [glitchTimer, content, origPos, noiseBar, dlg]() {
             glitchTimer->stop();
             content->move(origPos);
-            errorDetail->setVisible(true);
+            noiseBar->hide();
             dlg->accept();
         });
 
@@ -1664,12 +1858,41 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         QObject::connect(confirmBtn, &QPushButton::clicked, dlg, &QDialog::accept);
 
-        // 흰색 플래시: 400ms 유지 → 800ms 페이드아웃 → ACCESS GRANTED 노출
+        // 흰색 글리치 효과: 빠른 깜빡임 → 페이드아웃 → ACCESS GRANTED 노출
         auto *flashOpacity = new QGraphicsOpacityEffect(flashOverlay);
         flashOpacity->setOpacity(1.0);
         flashOverlay->setGraphicsEffect(flashOpacity);
 
-        QTimer::singleShot(400, dlg, [flashOpacity, flashOverlay]() {
+        // 글리치: 흰색 화면이 빠르게 깜빡이며 노이즈 효과
+        auto *whiteGlitchTimer = new QTimer(dlg);
+        whiteGlitchTimer->setInterval(60);
+        auto glitchStep = std::make_shared<int>(0);
+
+        QObject::connect(whiteGlitchTimer, &QTimer::timeout, dlg,
+            [flashOpacity, flashOverlay, glitchStep, dlg]() {
+                auto *rng = QRandomGenerator::global();
+                (*glitchStep)++;
+
+                // 빠른 on/off 깜빡임 + 불투명도 랜덤 변화
+                if (*glitchStep % 2 == 0) {
+                    flashOpacity->setOpacity(0.7 + (rng->bounded(30)) / 100.0);
+                } else {
+                    flashOpacity->setOpacity(rng->bounded(40) / 100.0);
+                }
+
+                // 흰색 노이즈 바 (오프셋)
+                int yShift = rng->bounded(11) - 5;
+                flashOverlay->move(0, yShift);
+            });
+
+        whiteGlitchTimer->start();
+
+        // 500ms 글리치 후 페이드아웃
+        QTimer::singleShot(500, dlg, [whiteGlitchTimer, flashOpacity, flashOverlay]() {
+            whiteGlitchTimer->stop();
+            flashOverlay->move(0, 0);
+            flashOpacity->setOpacity(1.0);
+
             auto *fadeOut = new QPropertyAnimation(flashOpacity, "opacity", flashOverlay);
             fadeOut->setDuration(800);
             fadeOut->setStartValue(1.0);
