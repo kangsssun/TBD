@@ -36,6 +36,7 @@ public:
 
 signals:
     void gmMessageReceived(const QString &text);
+    void returnToTitleRequested();
 
 public:
     void setSendMessageCallback(const std::function<void(const QString &)> &cb);

@@ -100,6 +100,16 @@ GameNode::GameNode(QWidget *parent)
     });
 
     // ── Connect emergency page confirm → go to ready page ──────────────
+    // ── Ending → return to title ──────────────────────────────────
+    QObject::connect(m_readyPage, &ReadyPage::returnToTitleRequested, this, [this]() {
+        qDebug() << "[SYSTEM] Returning to title from ending";
+        if (m_readyPage) {
+            m_readyPage->setMissionProgress(0);
+            m_readyPage->setGlobalProgress(0);
+        }
+        ui->stackedWidget->setCurrentIndex(0);
+    });
+
     QObject::connect(m_emergencyPage, &EmergencyPage::confirmed, this, [this]() {
         // 타이머는 서버에서 시작할 때까지 대기 (시간만 표시하고 카운트다운은 안 함)
         m_readyPage->syncTimer(20 * 60, false);

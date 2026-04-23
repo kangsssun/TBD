@@ -2662,6 +2662,25 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         cardRow->addStretch();
         outerLayout->addLayout(cardRow);
 
+        outerLayout->addSpacing(20);
+
+        // ── 처음으로 돌아가기 버튼 ──
+        auto *returnBtn = new QPushButton(QStringLiteral("처음으로"), dlg);
+        returnBtn->setFixedSize(180, 44);
+        returnBtn->setCursor(Qt::PointingHandCursor);
+        returnBtn->setFocusPolicy(Qt::NoFocus);
+        returnBtn->setStyleSheet(QStringLiteral(
+            "QPushButton { background: transparent; color: #556677; border: 1px solid #334455; "
+            "border-radius: 6px; font-size: 14px; font-weight: 600; font-family: Consolas; }"
+            "QPushButton:hover { color: #00bfff; border-color: #00bfff; }"));
+        auto *returnRow = new QHBoxLayout();
+        returnRow->addStretch();
+        returnRow->addWidget(returnBtn);
+        returnRow->addStretch();
+        outerLayout->addLayout(returnRow);
+
+        QObject::connect(returnBtn, &QPushButton::clicked, dlg, &QDialog::accept);
+
         outerLayout->addStretch(1);
 
         dlg->exec();
@@ -2672,4 +2691,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
     // 검은 배경 오버레이 제거
     blackBg->hide();
     blackBg->deleteLater();
+
+    // 타이틀 화면으로 복귀 요청
+    emit returnToTitleRequested();
 }
