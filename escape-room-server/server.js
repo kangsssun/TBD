@@ -707,28 +707,55 @@ const tcpServer = net.createServer((socket) => {
                     continue;
                 }
 
-                // 게임 클리어
+                // 게임 클리어 — 복구 코드 발급 플로우
                 if (msg.type === 'game_clear') {
                     const tid = String(msg.team_id || clientInfo.team_id);
+                    const code = generateRecoveryCode();
+                    recoveryCodes[tid] = code;
                     const t = getTeamTimer(tid);
                     t.running = false;
                     const elapsed = TIMER_INITIAL - t.timeRemaining;
                     const clearMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
                     const clearSec = (elapsed % 60).toString().padStart(2, '0');
                     const clearTime = `${clearMin}:${clearSec}`;
-                    console.log(`[CLEAR] 🎉 Team ${tid} GAME CLEAR! Time: ${clearTime} (${elapsed}s)`);
+                    clearRecords[tid] = { elapsed, clearTime };
+                    const rank = getClearRank(tid);
+                    const totalTeams = getTotalTeamCount();
+                    const isLast = (rank >= totalTeams && totalTeams > 1);
+                    console.log(`[CLEAR] Team ${tid} mission 5 done, recovery code: ${code}, time: ${clearTime}, rank: ${rank}/${totalTeams}`);
                     sendToTeam(tid, { type: 'timer_control', action: 'pause' });
                     sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: false });
+                    sendToTeam(tid, { type: 'recovery_code', code: code, clear_time: clearTime, rank, total_teams: totalTeams, is_last: isLast });
                     broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
                     broadcastToRole('gm', {
-                        type: 'game_clear', team_id: tid,
-                        team_name: msg.team_name || clientInfo.team_name || '',
-                        clear_time: clearTime, elapsed: elapsed
-                    });
-                    broadcastToRole('gm', {
                         type: 'chat_message', sender: 'system',
-                        team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${clearTime}`
+                        team_id: tid, text: `🔑 [T${tid}] 복구 코드 발급: ${code}`
                     });
+                    continue;
+                }
+
+                // 복구 코드 확인 (노드→서버, 기록용)
+                if (msg.type === 'verify_recovery_code') {
+                    const tid = String(msg.team_id || clientInfo.team_id);
+                    const inputCode = String(msg.code || '');
+                    const expectedCode = recoveryCodes[tid];
+                    if (inputCode === expectedCode) {
+                        console.log(`[CLEAR] 🎉 Team ${tid} FINAL CLEAR verified!`);
+                        const rec = clearRecords[tid] || {};
+                        broadcastToRole('gm', {
+                            type: 'game_clear', team_id: tid,
+                            team_name: msg.team_name || clientInfo.team_name || '',
+                            clear_time: rec.clearTime || '??:??', elapsed: rec.elapsed || 0,
+                            rank: getClearRank(tid), total_teams: getTotalTeamCount()
+                        });
+                        broadcastToRole('gm', {
+                            type: 'chat_message', sender: 'system',
+                            team_id: tid, text: `🎉 [T${tid}] GAME CLEAR! 클리어 타임: ${rec.clearTime || '??:??'} (${getClearRank(tid)}/${getTotalTeamCount()}등)`
+                        });
+                        delete recoveryCodes[tid];
+                    } else {
+                        console.log(`[CLEAR] Team ${tid} wrong recovery code: ${inputCode} (expected ${expectedCode})`);
+                    }
                     continue;
                 }
 
