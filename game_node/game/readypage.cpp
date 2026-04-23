@@ -994,18 +994,28 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         QStringList bootLines;
         bootLines << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Booting ESCAPE-OS v12.0...")
                   << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Initializing kernel modules...")
+                  << QStringLiteral("<span style='color:#888'>[17:45:00]</span> Loading /lib/modules/5.15.0-escape/kernel...")
+                  << QStringLiteral("<span style='color:#888'>[17:45:01]</span> <span style='color:#00ff41'>[  OK  ]</span> Started systemd-journald.service")
+                  << QStringLiteral("<span style='color:#888'>[17:45:01]</span> <span style='color:#00ff41'>[  OK  ]</span> Started systemd-udevd.service")
                   << QStringLiteral("<span style='color:#888'>[17:45:01]</span> Beacon Repair....")
                   << QStringLiteral("<span style='color:#888'>[17:45:01]</span> <span style='color:#00ff41'>[  OK  ]</span> Mounted /dev/sda1 on /mnt/beacon")
+                  << QStringLiteral("<span style='color:#888'>[17:45:02]</span> <span style='color:#00ff41'>[  OK  ]</span> Mounted /dev/sda2 on /mnt/data")
                   << QStringLiteral("<span style='color:#888'>[17:45:02]</span> <span style='color:#00ff41'>[  OK  ]</span> Started LED Beacon Service")
                   << QStringLiteral("<span style='color:#888'>[17:45:02]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Sound Authentication Module")
                   << QStringLiteral("<span style='color:#888'>[17:45:03]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Camera QR Decoder")
                   << QStringLiteral("<span style='color:#888'>[17:45:03]</span> <span style='color:#00ff41'>[  OK  ]</span> Loading network interface eth0...")
+                  << QStringLiteral("<span style='color:#888'>[17:45:03]</span> <span style='color:#00ff41'>[  OK  ]</span> Started sshd.service — OpenSSH Server")
                   << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Thermal Control Unit")
                   << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Gyro Navigation System")
+                  << QStringLiteral("<span style='color:#888'>[17:45:04]</span> <span style='color:#00ff41'>[  OK  ]</span> Started Buzzer Morse Driver")
                   << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Reached target Multi-User System")
-                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#ffcc00'>[ INFO ]</span> Scanning kernel for residual threats...")
+                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Started escape-room-server.service")
+                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#00ff41'>[  OK  ]</span> Listening on TCP port 5000")
+                  << QStringLiteral("<span style='color:#888'>[17:45:05]</span> <span style='color:#ffcc00'>[ INFO ]</span> All 5 mission modules loaded")
+                  << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> Scanning kernel for residual threats...")
                   << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> rmmod virus.ko ... <span style='color:#00ff41'>SUCCESS</span>")
                   << QStringLiteral("<span style='color:#888'>[17:45:06]</span> <span style='color:#ffcc00'>[ INFO ]</span> Verifying system integrity... checksum OK")
+                  << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ffcc00'>[ INFO ]</span> Restoring beacon broadcast frequency...")
                   << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff4444'>[ WARN ]</span> <span style='color:#ffcc00'>Unauthorized entity detected - scanning kernel...</span>")
                   << QStringLiteral("<span style='color:#888'>[17:45:07]</span> <span style='color:#ff2222'>[ALERT ]</span> <span style='color:#ff2222'>HAMSTER HIJACKED BOOT SEQUENCE</span>");
 
@@ -1017,7 +1027,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             [textLabel, bootTimer, bootLines, lineIdx, dlg]() {
                 const int idx = *lineIdx;
                 if (idx >= bootLines.size()) {
-                    QTimer::singleShot(1500, dlg, &QDialog::accept);
+                    QTimer::singleShot(1200, dlg, &QDialog::accept);
                     return;
                 }
                 QString html = textLabel->text();
@@ -1025,10 +1035,10 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 html += bootLines.at(idx);
                 textLabel->setText(html);
                 (*lineIdx)++;
-                bootTimer->start(550);
+                bootTimer->start(280);
             });
 
-        bootTimer->start(800);
+        bootTimer->start(500);
         dlg->exec();
         dlg->deleteLater();
     }
@@ -1423,7 +1433,7 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
             questionLabel->setWordWrap(true);
             questionLabel->setAlignment(Qt::AlignCenter);
             questionLabel->setText(QStringLiteral(
-                "갓찌가 12기 교육생들 어깨너머로 배워서, "
+                "갓찌가 12기 교육생들 어깨너머로 배워서, \n"
                 "가장 완벽하게 마스터한 프로그래밍 언어는 "
                 "무엇일까?"));
             questionLabel->setStyleSheet(QStringLiteral(
@@ -1858,45 +1868,85 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         QObject::connect(confirmBtn, &QPushButton::clicked, dlg, &QDialog::accept);
 
-        // 흰색 글리치 효과: 빠른 깜빡임 → 페이드아웃 → ACCESS GRANTED 노출
+        // 흰색 플래시 → 빛 확산 효과로 페이드아웃 (글리치 없음)
         auto *flashOpacity = new QGraphicsOpacityEffect(flashOverlay);
         flashOpacity->setOpacity(1.0);
         flashOverlay->setGraphicsEffect(flashOpacity);
 
-        // 글리치: 흰색 화면이 빠르게 깜빡이며 노이즈 효과
-        auto *whiteGlitchTimer = new QTimer(dlg);
-        whiteGlitchTimer->setInterval(60);
-        auto glitchStep = std::make_shared<int>(0);
+        // 수평 빛줄기 라인들
+        const int numBeams = 5;
+        QVector<QWidget *> lightBeams;
+        for (int i = 0; i < numBeams; ++i) {
+            auto *beam = new QWidget(dlg);
+            beam->setFixedSize(screenSize.width(), 2);
+            beam->move(0, screenSize.height() / 2);
+            beam->setStyleSheet(QStringLiteral("background-color: rgba(200, 240, 255, 200);"));
+            beam->hide();
+            beam->raise();
+            lightBeams.append(beam);
+        }
 
-        QObject::connect(whiteGlitchTimer, &QTimer::timeout, dlg,
-            [flashOpacity, flashOverlay, glitchStep, dlg]() {
-                auto *rng = QRandomGenerator::global();
-                (*glitchStep)++;
+        // 중앙 원형 광원
+        auto *glowCenter = new QWidget(dlg);
+        glowCenter->setFixedSize(60, 60);
+        glowCenter->move((screenSize.width() - 60) / 2, (screenSize.height() - 60) / 2);
+        glowCenter->setStyleSheet(QStringLiteral(
+            "background-color: rgba(255, 255, 255, 255); border-radius: 30px;"));
+        auto *glowEffect = new QGraphicsDropShadowEffect(glowCenter);
+        glowEffect->setBlurRadius(120);
+        glowEffect->setColor(QColor(200, 240, 255, 255));
+        glowEffect->setOffset(0, 0);
+        glowCenter->setGraphicsEffect(glowEffect);
+        glowCenter->show();
+        glowCenter->raise();
 
-                // 빠른 on/off 깜빡임 + 불투명도 랜덤 변화
-                if (*glitchStep % 2 == 0) {
-                    flashOpacity->setOpacity(0.7 + (rng->bounded(30)) / 100.0);
-                } else {
-                    flashOpacity->setOpacity(rng->bounded(40) / 100.0);
+        // 빛줄기 확산 애니메이션 (글리치 없이 부드럽게)
+        auto *beamTimer = new QTimer(dlg);
+        beamTimer->setInterval(50);
+        auto beamStep = std::make_shared<int>(0);
+
+        QObject::connect(beamTimer, &QTimer::timeout, dlg,
+            [beamStep, lightBeams, screenSize, glowCenter]() {
+                (*beamStep)++;
+
+                // 빛줄기를 중앙에서 퍼지며 표시
+                for (int i = 0; i < lightBeams.size(); ++i) {
+                    auto *beam = lightBeams[i];
+                    int spread = *beamStep * 4 + i * 20;
+                    int cy = screenSize.height() / 2;
+                    beam->setFixedSize(screenSize.width(), 2);
+                    beam->move(0, cy + (i % 2 == 0 ? spread : -spread));
+                    int alpha = qMax(0, 220 - *beamStep * 8);
+                    beam->setStyleSheet(QStringLiteral("background-color: rgba(200, 240, 255, %1);").arg(alpha));
+                    beam->show();
+                    beam->raise();
                 }
 
-                // 흰색 노이즈 바 (오프셋)
-                int yShift = rng->bounded(11) - 5;
-                flashOverlay->move(0, yShift);
+                // 광원 점점 커지기
+                int sz = 60 + *beamStep * 12;
+                glowCenter->setFixedSize(sz, sz);
+                glowCenter->move((screenSize.width() - sz) / 2, (screenSize.height() - sz) / 2);
+                glowCenter->setStyleSheet(QStringLiteral(
+                    "background-color: rgba(255, 255, 255, %1); border-radius: %2px;")
+                    .arg(qMax(0, 255 - *beamStep * 10)).arg(sz / 2));
             });
 
-        whiteGlitchTimer->start();
+        beamTimer->start();
 
-        // 500ms 글리치 후 페이드아웃
-        QTimer::singleShot(500, dlg, [whiteGlitchTimer, flashOpacity, flashOverlay]() {
-            whiteGlitchTimer->stop();
+        // 600ms 후: 빛줄기/광원 숨김 → 흰색 페이드아웃
+        QTimer::singleShot(600, dlg, [beamTimer, flashOpacity, flashOverlay, lightBeams, glowCenter]() {
+            beamTimer->stop();
             flashOverlay->move(0, 0);
             flashOpacity->setOpacity(1.0);
 
+            for (auto *beam : lightBeams) beam->hide();
+            glowCenter->hide();
+
             auto *fadeOut = new QPropertyAnimation(flashOpacity, "opacity", flashOverlay);
-            fadeOut->setDuration(800);
+            fadeOut->setDuration(1000);
             fadeOut->setStartValue(1.0);
             fadeOut->setEndValue(0.0);
+            fadeOut->setEasingCurve(QEasingCurve::OutQuad);
             QObject::connect(fadeOut, &QPropertyAnimation::finished, flashOverlay, &QWidget::hide);
             fadeOut->start(QAbstractAnimation::DeleteWhenStopped);
         });
@@ -1917,53 +1967,62 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         // ── 중앙 키패드 다이얼로그 ──
         auto *dlg = new QWidget(overlay);
-        dlg->setFixedSize(340, 440);
-        dlg->move((screenSize.width() - 340) / 2, (screenSize.height() - 440) / 2);
+        dlg->setFixedSize(360, 460);
+        dlg->move((screenSize.width() - 360) / 2, (screenSize.height() - 460) / 2);
         dlg->setStyleSheet(QStringLiteral(
-            "background: #000000; "
-            "border: 2px solid #00ff41; border-radius: 12px;"));
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #0a1628, stop:1 #050d18); "
+            "border: 1px solid rgba(0, 191, 255, 100); border-radius: 16px;"));
+        auto *dlgGlow = new QGraphicsDropShadowEffect(dlg);
+        dlgGlow->setBlurRadius(60);
+        dlgGlow->setColor(QColor(0, 150, 255, 80));
+        dlgGlow->setOffset(0, 0);
+        dlg->setGraphicsEffect(dlgGlow);
 
         auto *vbox = new QVBoxLayout(dlg);
-        vbox->setContentsMargins(24, 20, 24, 20);
-        vbox->setSpacing(10);
+        vbox->setContentsMargins(28, 12, 28, 20);
+        vbox->setSpacing(0);
 
         // ── 닫기 버튼 (우상단) ──
-        auto *closeBtn = new QPushButton(QStringLiteral("X"), dlg);
-        closeBtn->setFixedSize(36, 36);
+        auto *closeBtn = new QPushButton(QStringLiteral("\u2715"), dlg);
+        closeBtn->setFixedSize(32, 32);
         closeBtn->setCursor(Qt::PointingHandCursor);
         closeBtn->setFocusPolicy(Qt::NoFocus);
         closeBtn->setStyleSheet(QStringLiteral(
-            "QPushButton { background: transparent; color: #888888; border: none; "
-            "font-size: 22px; font-weight: bold; font-family: Consolas; }"
-            "QPushButton:hover { color: #ff4444; }"));
+            "QPushButton { background: transparent; color: #445566; border: none; "
+            "font-size: 18px; font-weight: bold; font-family: Consolas; }"
+            "QPushButton:hover { color: #ff4466; }"));
         auto *closeRow = new QHBoxLayout();
         closeRow->addStretch();
         closeRow->addWidget(closeBtn);
         vbox->addLayout(closeRow);
         QObject::connect(closeBtn, &QPushButton::clicked, overlay, &QDialog::reject);
 
+        vbox->addStretch();
+
         // ── 타이틀 ──
-        auto *titleLabel = new QLabel(QStringLiteral("퇴근 코드 입력"), dlg);
+        auto *titleLabel = new QLabel(QStringLiteral("MASTER EXIT CODE"), dlg);
         titleLabel->setAlignment(Qt::AlignCenter);
         titleLabel->setStyleSheet(QStringLiteral(
-            "color: #00ff41; font-size: 20px; font-weight: 900; "
+            "color: #00bfff; font-size: 16px; font-weight: 700; letter-spacing: 3px; "
             "font-family: Consolas; background: transparent; border: none;"));
         vbox->addWidget(titleLabel);
 
-        vbox->addSpacing(8);
+        vbox->addSpacing(10);
 
         // ── 입력 필드 ──
         auto *inputLine = new QLineEdit(dlg);
         inputLine->setAlignment(Qt::AlignCenter);
-        inputLine->setPlaceholderText(QStringLiteral("4자리 코드 입력"));
+        inputLine->setPlaceholderText(QStringLiteral("\u2022 \u2022 \u2022 \u2022"));
         inputLine->setMaxLength(4);
         inputLine->setReadOnly(true);
         inputLine->setFocusPolicy(Qt::NoFocus);
         inputLine->setStyleSheet(QStringLiteral(
-            "QLineEdit { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
-            "border-radius: 6px; font-size: 28px; font-weight: bold; "
-            "font-family: 'Consolas', monospace; padding: 6px; }"));
-        inputLine->setFixedWidth(280);
+            "QLineEdit { background: rgba(0, 20, 40, 200); color: #ffffff; "
+            "border: 1px solid rgba(0, 191, 255, 80); "
+            "border-radius: 8px; font-size: 32px; font-weight: 900; "
+            "font-family: 'Consolas', monospace; padding: 8px; letter-spacing: 12px; }"));
+        inputLine->setFixedWidth(260);
         auto *inputRow = new QHBoxLayout();
         inputRow->addStretch();
         inputRow->addWidget(inputLine);
@@ -1973,28 +2032,33 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         // ── 에러 메시지 ──
         auto *errLabel = new QLabel(dlg);
         errLabel->setAlignment(Qt::AlignCenter);
-        errLabel->setFixedHeight(20);
+        errLabel->setFixedHeight(18);
         errLabel->setStyleSheet(QStringLiteral(
-            "color: #ff4444; font-size: 13px; font-family: Consolas; background: transparent; border: none;"));
+            "color: #ff4466; font-size: 12px; font-family: Consolas; "
+            "background: transparent; border: none;"));
         errLabel->hide();
         vbox->addWidget(errLabel);
 
-        vbox->addSpacing(4);
+        vbox->addSpacing(6);
 
         // ── 숫자 키패드 ──
         const QString keyBtnStyle = QStringLiteral(
-            "QPushButton { background: #000000; color: #00ff41; border: 1px solid #00ff41; "
-            "border-radius: 6px; font-size: 22px; font-weight: 900; font-family: Consolas; }"
-            "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"
-            "QPushButton:pressed { background: #00cc33; color: #0c0c0c; }");
+            "QPushButton { background: rgba(10, 30, 60, 200); color: #e0e8f0; "
+            "border: 1px solid rgba(0, 191, 255, 50); "
+            "border-radius: 8px; font-size: 22px; font-weight: 800; font-family: Consolas; }"
+            "QPushButton:hover { background: rgba(0, 120, 220, 180); color: #ffffff; "
+            "border: 1px solid rgba(0, 191, 255, 160); }"
+            "QPushButton:pressed { background: rgba(0, 80, 160, 220); color: #ffffff; }");
         const QString delBtnStyle = QStringLiteral(
-            "QPushButton { background: #000000; color: #ff4444; border: 1px solid #ff4444; "
-            "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
-            "QPushButton:hover { background: #ff4444; color: #0c0c0c; }");
+            "QPushButton { background: rgba(40, 15, 20, 200); color: #ff6677; "
+            "border: 1px solid rgba(255, 68, 100, 50); "
+            "border-radius: 8px; font-size: 18px; font-weight: 800; font-family: Consolas; }"
+            "QPushButton:hover { background: rgba(180, 40, 60, 180); color: #ffffff; "
+            "border: 1px solid rgba(255, 68, 100, 160); }");
 
         auto *keypadWidget = new QWidget(dlg);
         auto *keypadGrid = new QGridLayout(keypadWidget);
-        keypadGrid->setContentsMargins(10, 0, 10, 0);
+        keypadGrid->setContentsMargins(6, 0, 6, 0);
         keypadGrid->setSpacing(8);
 
         for (int i = 1; i <= 9; ++i) {
@@ -2045,17 +2109,25 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         submitBtn->setCursor(Qt::PointingHandCursor);
         submitBtn->setFocusPolicy(Qt::NoFocus);
         submitBtn->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #000000; color: #00ff41; border: 2px solid #00ff41; "
-            "border-radius: 6px; font-size: 18px; font-weight: 900; font-family: Consolas; }"
-            "QPushButton:hover { background: #00ff41; color: #0c0c0c; }"));
+            "QPushButton { background: rgba(0, 80, 160, 200); color: #ffffff; "
+            "border: 1px solid rgba(0, 191, 255, 120); "
+            "border-radius: 8px; font-size: 17px; font-weight: 900; font-family: Consolas; }"
+            "QPushButton:hover { background: rgba(0, 120, 220, 240); "
+            "border: 1px solid rgba(0, 191, 255, 200); }"));
         auto *submitGlow = new QGraphicsDropShadowEffect(submitBtn);
-        submitGlow->setBlurRadius(16);
-        submitGlow->setColor(QColor(0, 255, 157, 120));
+        submitGlow->setBlurRadius(20);
+        submitGlow->setColor(QColor(0, 150, 255, 100));
         submitGlow->setOffset(0, 0);
         submitBtn->setGraphicsEffect(submitGlow);
         keypadGrid->addWidget(submitBtn, 3, 2);
 
-        vbox->addWidget(keypadWidget);
+        auto *keypadRow = new QHBoxLayout();
+        keypadRow->addStretch();
+        keypadRow->addWidget(keypadWidget);
+        keypadRow->addStretch();
+        vbox->addLayout(keypadRow);
+
+        vbox->addStretch();
 
         // ── 확인 버튼 검증 ──
         QObject::connect(submitBtn, &QPushButton::clicked, overlay, [this, overlay, inputLine, errLabel, recoveryCode]() {
@@ -2100,13 +2172,13 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         dlg->setAttribute(Qt::WA_DeleteOnClose, false);
         dlg->setFixedSize(screenSize);
         dlg->move(0, 0);
-        dlg->setStyleSheet(QStringLiteral("background-color: #000000;"));
+        dlg->setStyleSheet(QStringLiteral("background-color: #ffffff;"));
 
         auto *imageLabel = new QLabel(dlg);
         imageLabel->setFixedSize(screenSize);
         imageLabel->move(0, 0);
         imageLabel->setAlignment(Qt::AlignCenter);
-        imageLabel->setStyleSheet(QStringLiteral("background-color: #000000; border: none;"));
+        imageLabel->setStyleSheet(QStringLiteral("background-color: #ffffff; border: none;"));
         imageLabel->setScaledContents(false);
 
         // 투명 버튼 (하단 1/4 터치, 퇴실 버튼, 확인 버튼 등에 재사용)
@@ -2147,54 +2219,21 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
                 return;
             }
 
-            if (idx == 1) {
-                // 1번 이미지: 하단 1/4 영역 터치 시 다음
-                int btnH = screenSize.height() / 4;
-                overlayBtn->setGeometry(0, screenSize.height() - btnH, screenSize.width(), btnH);
-                overlayBtn->show();
-                overlayBtn->raise();
+            // 모든 이미지: 화면 전체 터치 시 다음
+            overlayBtn->setGeometry(0, 0, screenSize.width(), screenSize.height());
+            overlayBtn->show();
+            overlayBtn->raise();
+
+            if (idx < 8) {
                 QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [imgIdx, setupFn]() {
-                    *imgIdx = 2;
-                    (*setupFn)();
-                });
-            }
-            else if (idx >= 2 && idx <= 6) {
-                // 2~6번: 1초 후 자동으로 다음
-                QObject::connect(autoTimer, &QTimer::timeout, dlg, [imgIdx, setupFn]() {
                     (*imgIdx)++;
                     (*setupFn)();
                 });
-                autoTimer->start(1000);
-            }
-            else if (idx == 7) {
-                // 7번: 하단 "퇴실" 파란 버튼 위에 투명 버튼 오버레이
-                int btnW = screenSize.width() * 50 / 100;
-                int btnH = screenSize.height() * 10 / 100;
-                int btnX = (screenSize.width() - btnW) / 2;
-                int btnY = screenSize.height() * 87 / 100;
-                overlayBtn->setGeometry(btnX, btnY, btnW, btnH);
-                overlayBtn->show();
-                overlayBtn->raise();
-                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [imgIdx, setupFn]() {
-                    *imgIdx = 8;
-                    (*setupFn)();
-                });
-            }
-            else if (idx == 8) {
-                // 8번: 우측 "확인" 버튼 위에 투명 버튼 오버레이
-                int btnW = screenSize.width() * 30 / 100;
-                int btnH = screenSize.height() * 10 / 100;
-                int btnX = screenSize.width() * 60 / 100;
-                int btnY = screenSize.height() * 55 / 100;
-                overlayBtn->setGeometry(btnX, btnY, btnW, btnH);
-                overlayBtn->show();
-                overlayBtn->raise();
+            } else {
+                // 8번: 마지막 이미지 → 종료
                 QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [dlg]() {
                     dlg->accept();
                 });
-            }
-            else {
-                dlg->accept();
             }
         };
 
