@@ -115,7 +115,7 @@
             <div class="col-span-4 flex flex-col gap-4">
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">COMMUNICATION LOG</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div><div class="log-panel rounded p-2" id="log-panel"><div class="log-entry" style="color:var(--warn-yellow)">[SYSTEM] 다중 통신 모듈 초기화 완료</div></div></div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">GM BROADCAST</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
-                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="메시지 또는 커맨드 (T1 move mission 3, T2 skip, T1 ending, T1 hint ...)"><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
+                    <div class="flex gap-2"><select id="msg-target" class="px-2 py-1 rounded text-xs" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)"><option value="ALL">ALL</option></select><input type="text" id="gm-msg-input" class="flex-1 px-3 py-1 rounded text-xs focus:outline-none" style="background:var(--bg-panel);border:1px solid rgba(0,255,157,0.2);color:var(--text-white)" placeholder="커맨드 (T1 move mission 3, T2 skip, T1 set timer 10:30, T1 ending, T1 hint ...)"><button class="btn-action text-xs px-3" onclick="sendGmMessage()">SEND</button></div>
                 </div>
                 <div><div class="flex items-center gap-2 mb-3"><div class="status-label">QUICK ACTIONS</div><div class="flex-1 h-px" style="background:rgba(0,255,157,0.15)"></div></div>
                     <div class="grid grid-cols-2 gap-2">
@@ -320,7 +320,7 @@
             document.getElementById('gm-msg-input').value='';
 
             // --- GM 관리자 커맨드 파싱 ---
-            const cmdMatch = text.match(/^T(\d+)\s+(move\s+mission|skip|pause|resume|set\s+progress|hint|ending)\s*(.*)$/i);
+            const cmdMatch = text.match(/^T(\d+)\s+(move\s+mission|skip|pause|resume|set\s+progress|set\s+timer|hint|ending)\s*(.*)$/i);
             if (cmdMatch) {
                 const cmdTeam = cmdMatch[1];
                 const cmdAction = cmdMatch[2].toLowerCase().replace(/\s+/g,'_');
@@ -347,6 +347,20 @@
                         gmSocket.send(JSON.stringify({type:'gm_command',command:'set_progress',team_id:cmdTeam,progress:pct}));
                         addChatLog('CMD',`T${cmdTeam}`,`⚙ 진행도 ${pct}%로 설정`);
                     } else { addChatLog('SYSTEM','GM','❌ 진행도는 0~100'); }
+                } else if (cmdAction === 'set_timer') {
+                    // MM:SS 또는 초 단위 지원
+                    let seconds = -1;
+                    const timeMatch = cmdArg.match(/^(\d+):(\d{2})$/);
+                    if (timeMatch) {
+                        seconds = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+                    } else {
+                        const num = parseInt(cmdArg);
+                        if (!isNaN(num)) seconds = num * 60; // 숫자만 입력하면 분 단위로 해석
+                    }
+                    if (seconds >= 0) {
+                        gmSocket.send(JSON.stringify({type:'gm_command',command:'set_timer',team_id:cmdTeam,seconds:seconds}));
+                        addChatLog('CMD',`T${cmdTeam}`,`⏱ 타이머 ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}로 설정`);
+                    } else { addChatLog('SYSTEM','GM','❌ 형식: T1 set timer 10 (분) 또는 T1 set timer 10:30 (분:초)'); }
                 } else if (cmdAction === 'hint') {
                     const hintText = cmdArg || '힌트를 확인하세요!';
                     gmSocket.send(JSON.stringify({type:'gm_command',command:'send_hint',team_id:cmdTeam,hint:hintText}));

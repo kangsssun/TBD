@@ -430,6 +430,21 @@ wss.on('connection', (ws, req) => {
             else if (data.command === 'resume_team') {
                 sendToTeam(tid, { type: 'team_pause', paused: false });
             }
+            else if (data.command === 'set_timer') {
+                // GM이 특정 팀의 타이머를 직접 설정 (초 단위 또는 MM:SS 형식)
+                const t = getTeamTimer(tid);
+                const seconds = data.seconds;
+                if (typeof seconds === 'number' && seconds >= 0) {
+                    t.timeRemaining = Math.min(seconds, TIMER_INITIAL);
+                    console.log(`[TIMER] GM set Team ${tid} timer to ${t.timeRemaining}s`);
+                    sendToTeam(tid, { type: 'timer_sync', timeRemaining: t.timeRemaining, running: t.running });
+                    broadcastToRole('gm', { type: 'all_timers', timers: teamTimers });
+                    broadcastToRole('gm', {
+                        type: 'chat_message', sender: 'system',
+                        team_id: tid, text: `⏱ [T${tid}] 타이머 ${Math.floor(t.timeRemaining/60)}:${String(t.timeRemaining%60).padStart(2,'0')}로 설정`
+                    });
+                }
+            }
             else if (data.command === 'force_ending') {
                 // GM이 엔딩으로 강제 이동 — 복구 코드 입력부터 시작
                 const code = generateRecoveryCode();
