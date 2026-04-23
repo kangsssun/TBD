@@ -278,7 +278,7 @@ void EmergencyPage::reset()
     m_stack->setCurrentWidget(m_storyLayer);
 
     m_storyFlashAnim->start();
-    m_storyTimer->start(5000);
+    m_storyTimer->start(8000);
 
     m_confirmButton->setStyleSheet(m_confirmStyle);
     m_confirmButton->setEnabled(true);

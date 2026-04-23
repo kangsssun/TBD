@@ -1868,87 +1868,9 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
         QObject::connect(confirmBtn, &QPushButton::clicked, dlg, &QDialog::accept);
 
-        // 흰색 플래시 → 빛 확산 효과로 페이드아웃 (글리치 없음)
-        auto *flashOpacity = new QGraphicsOpacityEffect(flashOverlay);
-        flashOpacity->setOpacity(1.0);
-        flashOverlay->setGraphicsEffect(flashOpacity);
-
-        // 수평 빛줄기 라인들
-        const int numBeams = 5;
-        QVector<QWidget *> lightBeams;
-        for (int i = 0; i < numBeams; ++i) {
-            auto *beam = new QWidget(dlg);
-            beam->setFixedSize(screenSize.width(), 2);
-            beam->move(0, screenSize.height() / 2);
-            beam->setStyleSheet(QStringLiteral("background-color: rgba(200, 240, 255, 200);"));
-            beam->hide();
-            beam->raise();
-            lightBeams.append(beam);
-        }
-
-        // 중앙 원형 광원
-        auto *glowCenter = new QWidget(dlg);
-        glowCenter->setFixedSize(60, 60);
-        glowCenter->move((screenSize.width() - 60) / 2, (screenSize.height() - 60) / 2);
-        glowCenter->setStyleSheet(QStringLiteral(
-            "background-color: rgba(255, 255, 255, 255); border-radius: 30px;"));
-        auto *glowEffect = new QGraphicsDropShadowEffect(glowCenter);
-        glowEffect->setBlurRadius(120);
-        glowEffect->setColor(QColor(200, 240, 255, 255));
-        glowEffect->setOffset(0, 0);
-        glowCenter->setGraphicsEffect(glowEffect);
-        glowCenter->show();
-        glowCenter->raise();
-
-        // 빛줄기 확산 애니메이션 (글리치 없이 부드럽게)
-        auto *beamTimer = new QTimer(dlg);
-        beamTimer->setInterval(50);
-        auto beamStep = std::make_shared<int>(0);
-
-        QObject::connect(beamTimer, &QTimer::timeout, dlg,
-            [beamStep, lightBeams, screenSize, glowCenter]() {
-                (*beamStep)++;
-
-                // 빛줄기를 중앙에서 퍼지며 표시
-                for (int i = 0; i < lightBeams.size(); ++i) {
-                    auto *beam = lightBeams[i];
-                    int spread = *beamStep * 4 + i * 20;
-                    int cy = screenSize.height() / 2;
-                    beam->setFixedSize(screenSize.width(), 2);
-                    beam->move(0, cy + (i % 2 == 0 ? spread : -spread));
-                    int alpha = qMax(0, 220 - *beamStep * 8);
-                    beam->setStyleSheet(QStringLiteral("background-color: rgba(200, 240, 255, %1);").arg(alpha));
-                    beam->show();
-                    beam->raise();
-                }
-
-                // 광원 점점 커지기
-                int sz = 60 + *beamStep * 12;
-                glowCenter->setFixedSize(sz, sz);
-                glowCenter->move((screenSize.width() - sz) / 2, (screenSize.height() - sz) / 2);
-                glowCenter->setStyleSheet(QStringLiteral(
-                    "background-color: rgba(255, 255, 255, %1); border-radius: %2px;")
-                    .arg(qMax(0, 255 - *beamStep * 10)).arg(sz / 2));
-            });
-
-        beamTimer->start();
-
-        // 600ms 후: 빛줄기/광원 숨김 → 흰색 페이드아웃
-        QTimer::singleShot(600, dlg, [beamTimer, flashOpacity, flashOverlay, lightBeams, glowCenter]() {
-            beamTimer->stop();
-            flashOverlay->move(0, 0);
-            flashOpacity->setOpacity(1.0);
-
-            for (auto *beam : lightBeams) beam->hide();
-            glowCenter->hide();
-
-            auto *fadeOut = new QPropertyAnimation(flashOpacity, "opacity", flashOverlay);
-            fadeOut->setDuration(1000);
-            fadeOut->setStartValue(1.0);
-            fadeOut->setEndValue(0.0);
-            fadeOut->setEasingCurve(QEasingCurve::OutQuad);
-            QObject::connect(fadeOut, &QPropertyAnimation::finished, flashOverlay, &QWidget::hide);
-            fadeOut->start(QAbstractAnimation::DeleteWhenStopped);
+        // 흰색 플래시: 400ms 유지 후 즉시 숨김
+        QTimer::singleShot(400, dlg, [flashOverlay]() {
+            flashOverlay->hide();
         });
 
         dlg->exec();
@@ -2162,8 +2084,8 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
 
     } // end while (!keypadAccepted)
 
-    // ═══ 4-B단계: 엔딩 이미지 시퀀스 (ending/1.jpg ~ 8.jpg) ═══
-    // 1번: 하단 1/4 터치 시 다음, 2~6번: 1초 자동, 7번: 퇴실 버튼, 8번: 확인 버튼
+    // ═══ 4-B단계: 엔딩 이미지 시퀀스 (ending/1.png ~ 8.png) ═══
+    // 1번: 터치→다음, 2~7번: 1초 자동, 8번: 터치→종료
     {
         const QString endingDir = QStringLiteral("/mnt/nfs/ending/");
 
@@ -2181,67 +2103,103 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         imageLabel->setStyleSheet(QStringLiteral("background-color: #ffffff; border: none;"));
         imageLabel->setScaledContents(false);
 
-        // 투명 버튼 (하단 1/4 터치, 퇴실 버튼, 확인 버튼 등에 재사용)
+        // 전체 화면 터치 버튼
         auto *overlayBtn = new QPushButton(dlg);
+        overlayBtn->setGeometry(0, 0, screenSize.width(), screenSize.height());
         overlayBtn->setStyleSheet(QStringLiteral("background: transparent; border: none;"));
         overlayBtn->setCursor(Qt::PointingHandCursor);
         overlayBtn->setFocusPolicy(Qt::NoFocus);
-        overlayBtn->hide();
+        overlayBtn->raise();
 
-        auto *autoTimer = new QTimer(dlg);
-        autoTimer->setSingleShot(true);
-
-        auto imgIdx = std::make_shared<int>(0);
-
-        // 이미지 로드 함수
+        // 이미지 로드 함수 (png → jpg 순으로 시도)
         auto loadImage = [imageLabel, endingDir, screenSize](int idx) -> bool {
-            QString path = endingDir + QString::number(idx) + QStringLiteral(".jpg");
-            QPixmap pix(path);
-            if (pix.isNull()) {
-                qDebug() << "[ENDING] Image not found:" << path;
-                return false;
+            const QString base = endingDir + QString::number(idx);
+            const QStringList exts = { QStringLiteral(".png"), QStringLiteral(".jpg") };
+            for (const QString &ext : exts) {
+                const QString path = base + ext;
+                QPixmap pix(path);
+                if (!pix.isNull()) {
+                    qDebug() << "[ENDING] Showing image:" << path;
+                    imageLabel->setPixmap(pix.scaled(screenSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    return true;
+                }
             }
-            imageLabel->setPixmap(pix.scaled(screenSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            return true;
+            qDebug() << "[ENDING] Image not found:" << base << "(.png/.jpg)";
+            return false;
         };
 
-        // 각 이미지 상태별 설정 함수
-        auto setupFn = std::make_shared<std::function<void()>>();
-        *setupFn = [dlg, overlayBtn, autoTimer, imgIdx, loadImage, screenSize, setupFn]() {
-            int idx = *imgIdx;
-            overlayBtn->hide();
-            overlayBtn->disconnect();
-            autoTimer->stop();
-            autoTimer->disconnect();
+        // 첫 번째 이미지 로드
+        if (!loadImage(1)) {
+            qDebug() << "[ENDING] First image not found, skipping image sequence";
+            delete dlg;
+            dlg = nullptr;
+        }
 
-            if (!loadImage(idx)) {
-                dlg->accept();
-                return;
-            }
+        if (dlg) {
+            auto imgIdx = std::make_shared<int>(1);
+            auto *autoTimer = new QTimer(dlg);
+            autoTimer->setSingleShot(true);
 
-            // 모든 이미지: 화면 전체 터치 시 다음
-            overlayBtn->setGeometry(0, 0, screenSize.width(), screenSize.height());
-            overlayBtn->show();
-            overlayBtn->raise();
-
-            if (idx < 8) {
-                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [imgIdx, setupFn]() {
-                    (*imgIdx)++;
-                    (*setupFn)();
-                });
-            } else {
-                // 8번: 마지막 이미지 → 종료
-                QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [dlg]() {
+            // autoTimer tick: 자동 전환 (2~6번 구간)
+            QObject::connect(autoTimer, &QTimer::timeout, dlg, [dlg, imgIdx, loadImage, overlayBtn, autoTimer]() {
+                (*imgIdx)++;
+                qDebug() << "[ENDING] Auto advance → idx:" << *imgIdx;
+                if (*imgIdx > 8 || !loadImage(*imgIdx)) {
                     dlg->accept();
-                });
-            }
-        };
+                    return;
+                }
+                overlayBtn->raise();
 
-        *imgIdx = 1;
-        (*setupFn)();
+                // 6번 이하면 다음 tick 예약, 7번 도달 시 터치 대기
+                if (*imgIdx <= 6) {
+                    autoTimer->start(1000);
+                } else {
+                    // 7번 도달: 버튼이 확실히 위에 오도록 지연 raise
+                    QTimer::singleShot(50, overlayBtn, [overlayBtn]() {
+                        overlayBtn->raise();
+                        overlayBtn->show();
+                    });
+                }
+            });
 
-        dlg->exec();
-        dlg->deleteLater();
+            // 터치 핸들러: 1번 → 자동 시퀀스 시작, 7번/8번 → 다음/종료
+            auto touchBusy = std::make_shared<bool>(false);
+            QObject::connect(overlayBtn, &QPushButton::clicked, dlg, [dlg, imgIdx, loadImage, overlayBtn, autoTimer, touchBusy]() {
+                if (*touchBusy) return;
+                *touchBusy = true;
+                QTimer::singleShot(500, dlg, [touchBusy]() { *touchBusy = false; });
+
+                qDebug() << "[ENDING] Touch detected, imgIdx =" << *imgIdx;
+
+                if (*imgIdx == 1) {
+                    (*imgIdx)++;
+                    qDebug() << "[ENDING] Touch on 1 → starting auto sequence from 2";
+                    if (!loadImage(2)) {
+                        dlg->accept();
+                        return;
+                    }
+                    overlayBtn->raise();
+                    autoTimer->start(1000);  // 1초 뒤 3번으로 자동 전환 시작
+                } else if (*imgIdx == 7) {
+                    // 7→8: 터치로 전환
+                    (*imgIdx)++;
+                    qDebug() << "[ENDING] Touch on 7 → showing 8";
+                    if (!loadImage(8)) {
+                        dlg->accept();
+                        return;
+                    }
+                    overlayBtn->raise();
+                } else if (*imgIdx == 8) {
+                    qDebug() << "[ENDING] Touch on 8 → ending image sequence";
+                    dlg->accept();
+                }
+                // 2~6 자동 진행 중에는 터치 무시
+            });
+
+            dlg->exec();
+            autoTimer->stop();
+            dlg->deleteLater();
+        }
     }
 
     // ═══ 5단계: 퇴실 처리 팝업 ═══
@@ -2545,53 +2503,166 @@ void ReadyPage::showEndingSequence(const QString &recoveryCode,
         dlg->move(0, 0);
         dlg->setStyleSheet(QStringLiteral("background-color: #000000;"));
 
-        auto *layout = new QVBoxLayout(dlg);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
+        auto *outerLayout = new QVBoxLayout(dlg);
+        outerLayout->setContentsMargins(0, 0, 0, 0);
+        outerLayout->addStretch(1);
 
-        layout->addStretch(2);
+        // ── 중앙 카드 ──
+        auto *card = new QFrame(dlg);
+        card->setFixedSize(560, 420);
+        card->setStyleSheet(QStringLiteral(
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            "stop:0 #0a1a0a, stop:0.5 #0d0d0d, stop:1 #0a0a1a); "
+            "border: 2px solid rgba(0, 255, 65, 80); border-radius: 16px;"));
+        auto *cardGlow = new QGraphicsDropShadowEffect(card);
+        cardGlow->setBlurRadius(80);
+        cardGlow->setColor(QColor(0, 255, 65, 100));
+        cardGlow->setOffset(0, 0);
+        card->setGraphicsEffect(cardGlow);
 
-        auto *titleLabel = new QLabel(QStringLiteral("Mission Clear!"), dlg);
+        auto *cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(32, 28, 32, 28);
+        cardLayout->setSpacing(0);
+
+        // ── 상단 장식 라인 ──
+        auto *topLine = new QLabel(
+            QStringLiteral("━━━━━━━━━━━━━━━━━━━━━━━━━━━"), card);
+        topLine->setAlignment(Qt::AlignCenter);
+        topLine->setStyleSheet(QStringLiteral(
+            "color: rgba(0, 255, 65, 40); font-size: 10px; font-family: Consolas; "
+            "background: transparent; border: none;"));
+        cardLayout->addWidget(topLine);
+
+        cardLayout->addSpacing(16);
+
+        // ── 타이틀: Mission Clear! ──
+        auto *titleLabel = new QLabel(QStringLiteral("MISSION CLEAR"), card);
         titleLabel->setAlignment(Qt::AlignCenter);
         titleLabel->setStyleSheet(QStringLiteral(
-            "color: #00ff41; font-size: 48px; font-weight: 900; "
-            "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-        layout->addWidget(titleLabel);
+            "color: #00ff41; font-size: 42px; font-weight: 900; letter-spacing: 4px; "
+            "font-family: 'Consolas', 'Courier New', monospace; background: transparent; border: none;"));
+        auto *titleGlow = new QGraphicsDropShadowEffect(titleLabel);
+        titleGlow->setBlurRadius(60);
+        titleGlow->setColor(QColor(0, 255, 65, 180));
+        titleGlow->setOffset(0, 0);
+        titleLabel->setGraphicsEffect(titleGlow);
+        cardLayout->addWidget(titleLabel);
 
-        layout->addSpacing(40);
+        cardLayout->addSpacing(8);
 
-        auto *teamLabel = new QLabel(QStringLiteral("팀명: ") + m_teamName, dlg);
+        // ── 서브타이틀 ──
+        auto *subTitle = new QLabel(
+            QStringLiteral("ALL SYSTEMS RESTORED SUCCESSFULLY"), card);
+        subTitle->setAlignment(Qt::AlignCenter);
+        subTitle->setStyleSheet(QStringLiteral(
+            "color: rgba(0, 191, 255, 140); font-size: 11px; font-weight: 600; "
+            "letter-spacing: 3px; font-family: Consolas; background: transparent; border: none;"));
+        cardLayout->addWidget(subTitle);
+
+        cardLayout->addSpacing(24);
+
+        // ── 구분선 ──
+        auto *divider = new QFrame(card);
+        divider->setFixedHeight(1);
+        divider->setStyleSheet(QStringLiteral(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            "stop:0 transparent, stop:0.3 rgba(0,255,65,80), "
+            "stop:0.7 rgba(0,255,65,80), stop:1 transparent);"));
+        cardLayout->addWidget(divider);
+
+        cardLayout->addSpacing(24);
+
+        // ── 팀명 ──
+        auto *teamHeader = new QLabel(QStringLiteral("TEAM"), card);
+        teamHeader->setAlignment(Qt::AlignCenter);
+        teamHeader->setStyleSheet(QStringLiteral(
+            "color: #556677; font-size: 12px; font-weight: 600; letter-spacing: 3px; "
+            "font-family: Consolas; background: transparent; border: none;"));
+        cardLayout->addWidget(teamHeader);
+
+        cardLayout->addSpacing(4);
+
+        auto *teamLabel = new QLabel(m_teamName, card);
         teamLabel->setAlignment(Qt::AlignCenter);
         teamLabel->setStyleSheet(QStringLiteral(
-            "color: #ffffff; font-size: 32px; font-weight: bold; "
+            "color: #ffffff; font-size: 30px; font-weight: 900; "
             "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-        layout->addWidget(teamLabel);
+        cardLayout->addWidget(teamLabel);
 
-        layout->addSpacing(20);
+        cardLayout->addSpacing(20);
 
-        auto *timeLabel = new QLabel(QStringLiteral("Clear Time: ") + clearTime, dlg);
+        // ── 클리어 타임 ──
+        auto *timeHeader = new QLabel(QStringLiteral("CLEAR TIME"), card);
+        timeHeader->setAlignment(Qt::AlignCenter);
+        timeHeader->setStyleSheet(QStringLiteral(
+            "color: #556677; font-size: 12px; font-weight: 600; letter-spacing: 3px; "
+            "font-family: Consolas; background: transparent; border: none;"));
+        cardLayout->addWidget(timeHeader);
+
+        cardLayout->addSpacing(4);
+
+        auto *timeLabel = new QLabel(clearTime, card);
         timeLabel->setAlignment(Qt::AlignCenter);
         timeLabel->setStyleSheet(QStringLiteral(
-            "color: #ffcc00; font-size: 36px; font-weight: bold; "
+            "color: #ffcc00; font-size: 38px; font-weight: 900; letter-spacing: 6px; "
             "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-        layout->addWidget(timeLabel);
+        auto *timeGlow = new QGraphicsDropShadowEffect(timeLabel);
+        timeGlow->setBlurRadius(30);
+        timeGlow->setColor(QColor(255, 204, 0, 120));
+        timeGlow->setOffset(0, 0);
+        timeLabel->setGraphicsEffect(timeGlow);
+        cardLayout->addWidget(timeLabel);
 
         if (rank > 0 && totalTeams > 0) {
-            layout->addSpacing(20);
+            cardLayout->addSpacing(20);
+
+            // ── 구분선 ──
+            auto *divider2 = new QFrame(card);
+            divider2->setFixedHeight(1);
+            divider2->setStyleSheet(QStringLiteral(
+                "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+                "stop:0 transparent, stop:0.3 rgba(0,255,65,80), "
+                "stop:0.7 rgba(0,255,65,80), stop:1 transparent);"));
+            cardLayout->addWidget(divider2);
+
+            cardLayout->addSpacing(16);
+
             QString rankText = isLast
-                ? QStringLiteral("🚫 퇴근불가 (%1/%2등)").arg(rank).arg(totalTeams)
-                : QStringLiteral("🏆 %1/%2등").arg(rank).arg(totalTeams);
-            auto *rankLabel = new QLabel(rankText, dlg);
+                ? QStringLiteral("퇴근불가  %1/%2등").arg(rank).arg(totalTeams)
+                : QStringLiteral("%1/%2등").arg(rank).arg(totalTeams);
+            auto *rankLabel = new QLabel(rankText, card);
             rankLabel->setAlignment(Qt::AlignCenter);
             rankLabel->setStyleSheet(isLast
-                ? QStringLiteral("color: #ff4444; font-size: 32px; font-weight: 900; "
+                ? QStringLiteral("color: #ff4444; font-size: 28px; font-weight: 900; "
                     "font-family: 'Consolas', monospace; background: transparent; border: none;")
-                : QStringLiteral("color: #00ff9d; font-size: 32px; font-weight: 900; "
+                : QStringLiteral("color: #00ff9d; font-size: 28px; font-weight: 900; "
                     "font-family: 'Consolas', monospace; background: transparent; border: none;"));
-            layout->addWidget(rankLabel);
+            auto *rankGlow = new QGraphicsDropShadowEffect(rankLabel);
+            rankGlow->setBlurRadius(30);
+            rankGlow->setColor(isLast ? QColor(255, 68, 68, 120) : QColor(0, 255, 157, 120));
+            rankGlow->setOffset(0, 0);
+            rankLabel->setGraphicsEffect(rankGlow);
+            cardLayout->addWidget(rankLabel);
         }
 
-        layout->addStretch(3);
+        cardLayout->addStretch();
+
+        // ── 하단 장식 라인 ──
+        auto *bottomLine = new QLabel(
+            QStringLiteral("━━━━━━━━━━━━━━━━━━━━━━━━━━━"), card);
+        bottomLine->setAlignment(Qt::AlignCenter);
+        bottomLine->setStyleSheet(QStringLiteral(
+            "color: rgba(0, 255, 65, 40); font-size: 10px; font-family: Consolas; "
+            "background: transparent; border: none;"));
+        cardLayout->addWidget(bottomLine);
+
+        auto *cardRow = new QHBoxLayout();
+        cardRow->addStretch();
+        cardRow->addWidget(card);
+        cardRow->addStretch();
+        outerLayout->addLayout(cardRow);
+
+        outerLayout->addStretch(1);
 
         dlg->exec();
     }
